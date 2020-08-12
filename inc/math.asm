@@ -1,12 +1,19 @@
 // ;==========================================================
 // ; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 // ; Seriously fast multiplication by JackAsser
+// ; https://codebase64.org/doku.php?id=base:seriously_fast_multiplication
+// ;
+// ; Implementatin of "multiply_32bit_unsigned" by DKT
 // ; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 // ;==========================================================
 
-.const 	T1 	= $10
-.const 	T2 	= $12
-.const 	PRODUCT 	= $14
+.const 	T1 		= $10 // 16-bit input
+.const 	T2 		= $12 // 16-bit input
+.const 	PRODUCT 		= $14 // 32-bit result
+
+.const 	T32_1 		= $18 // 32-bit input
+.const 	T32_2 		= $1c // 32-bit input
+.const 	PRODUCT32 	= $20 // 32-bit result
 
 // ;==========================================================
 // ; Multiply tables generator by Graham
@@ -79,14 +86,15 @@ multiply_8bit_unsigned:
 	sta sm2+1
 	sta sm4+1
 !:	ldx T2
-sm1:     lda square1_lo,x
+sm1:	lda square1_lo,x
 	sec
-sm2:     sbc square2_lo,x
-         sta PRODUCT+0
-sm3:     lda square1_hi,x
-sm4:     sbc square2_hi,x
-         sta PRODUCT+1   
+sm2:	sbc square2_lo,x
+	sta PRODUCT+0
+sm3:	lda square1_hi,x
+sm4:	sbc square2_hi,x
+	sta PRODUCT+1   
 	rts
+	
 // ;==========================================================
 // ; Description: Signed 8-bit multiplication with signed 16-bit result.
 // ;                                                                    
@@ -263,6 +271,37 @@ multiply_16bit_signed:
 	sbc T1+1
 	sta PRODUCT+3
 !:	rts
+
+// ;==========================================================
+// ; Description: Unsigned 32-bit multiplication with unsigned 32-bit result.
+// ;                                                                         
+// ; Input: 32-bit unsigned value in T32_1
+// ;        32-bit unsigned value in T32_2
+// ;                                                                         
+// ; Output: 32-bit unsigned value in PRODUCT
+// ;                                                                         
+// ; Clobbered: PRODUCT, X, A, C
+// ;==========================================================
+multiply_32bit_unsigned:
+
+	lda T32_1+0
+	sta T1+0
+	lda T32_1+1
+	sta T1+1
+	lda T32_2+0
+	sta T2+0
+	lda T32_2+1
+	sta T2+1
+	sec
+	jsr multiply_16bit_unsigned
+	lda T32_2+2
+	sta T2+0
+	lda T32_2+3
+	sta T2+1
+	sec
+	jsr multiply_16bit_unsigned
+
+	rts
 
 // ;==========================================================
 
