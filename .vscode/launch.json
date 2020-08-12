@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"configurations": [
+		{
+			"type": "kickassembler",
+			"request": "launch",
+			"name": "Debug kickass leaf.asm file",
+			"program": "${workspaceFolder}\\leaf.asm",
+			"binDirectory": "${workspaceFolder}\\bin",
+			"preLaunchTask": "Build kickass leaf.asm"
+		}
+	]
+}

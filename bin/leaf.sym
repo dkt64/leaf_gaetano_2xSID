@@ -1,0 +1,3 @@
+.label start=$80e
+.label irq1=$846 {
+}

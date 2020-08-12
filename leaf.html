@@ -1,0 +1,123 @@
+<canvas id="canvas" width="1280" height="800">
+</canvas>
+
+<script>
+    let canvas;
+    let canvasContext;
+
+    let move;
+
+    let fps = 250;
+
+    let pointColor = "white";
+    let backgroundColor = "black";
+    let pointRadius = 1;
+
+    let x = 0;
+    let y = 0;
+
+    window.onload = function () {
+        canvas = document.getElementById("canvas");
+        canvasContext = canvas.getContext('2d');
+
+        canvasContext.fillStyle = backgroundColor;
+        canvasContext.fillRect(0, 0, canvas.width, canvas.height);
+
+        move = setInterval(doIt, 1000 / fps);
+    };
+
+    let doIt = function () {
+        for (let i = 0; i < 200; i++)
+            moveAll()
+    };
+
+    function moveAll() {
+
+        let nextX, nextY;
+
+        // let r = (Math.random()*4096).toFixed(0)
+        // // console.log("random nr " + r) // 0.0 ... 0.99
+        // if (r < 40) {
+        //     nextX = 0;
+        //     nextY = 409 * y;
+        // } else if (r < 3522) {
+        //     nextX = 3481 * x + 163 * y;
+        //     nextY = -163 * x + 3481 * y + 6553;
+        // } else if (r < 3809) {
+        //     nextX = 819 * x - 1064 * y;
+        //     nextY = 942 * x + 901 * y + 6553;
+        // } else {
+        //     nextX = -614 * x + 1146 * y;
+        //     nextY = 1064 * x + 983 * y + 1802;
+        // }
+
+        let r = (Math.random()*256).toFixed()
+        // console.log("random nr " + r) // 0.0 ... 0.99
+        if (r < 2) {
+            nextX = 0;
+            nextY = 25 * y;
+        } else if (r < 220) {
+            nextX = 217 * x + 10 * y;
+            nextY = 10 * x + 217 * y + 309;
+        } else if (r < 238) {
+            nextX = 51 * x - 66 * y;
+            nextY = 58 * x + 56 * y + 309;
+        } else {
+            nextX = -38 * x + 71 * y;
+            nextY = 66 * x + 61 * y + 112;
+        }
+        // nextX = (nextX/256).toFixed(2)
+        // nextY = (nextY/256).toFixed(2)
+
+        // console.log("random nr " + r) // 0.0 ... 0.99
+        // if (r < 0.01) {
+        //     nextX = 0;
+        //     nextY = 0.1 * y;
+        // } else if (r < 0.86) {
+        //     nextX = 0.85 * x + 0.04 * y;
+        //     nextY = -0.04 * x + 0.85 * y + 1.6;
+        // } else if (r < 0.93) {
+        //     nextX = 0.20 * x - 0.26 * y;
+        //     nextY = 0.23 * x + 0.22 * y + 1.6;
+        // } else {
+        //     nextX = -0.15 * x + 0.28 * y;
+        //     nextY = 0.26 * x + 0.24 * y + 0.44;
+        // }
+
+        // nextX = nextX.toPrecision(3)
+        // nextY = nextY.toPrecision(3)
+
+        // Skalowanie i pozycjonowanie
+        // let plotX = canvas.width * (x + 3) / 10;
+        // let plotY = canvas.height - canvas.height * ((y + 2) / 14);
+        let plotX = x * canvas.width/10 + canvas.width*2/5;
+        let plotY = canvas.height - y * canvas.height/10;
+        // console.log("plotX " + plotX + " x " + x)
+        // console.log("plotY " + plotY + " y " + y)
+
+        drawFilledCircle(plotX, plotY, pointRadius, pointColor);
+
+        // x = (nextX/4096).toFixed(0)
+        // y = (nextY/4096).toFixed(0)
+
+        if (nextX > 4096.0) {
+            nextX = 4096.0
+        }
+        if (nextY > 4096.0) {
+            nextY = 4096.0
+        }
+
+        x = (nextX/256).toFixed(2)
+        y = (nextY/256).toFixed(2)
+
+        // x = nextX
+        // y = nextY
+
+    }
+    const drawFilledCircle = (centerX, centerY, radius, color) => {
+        canvasContext.beginPath();
+        canvasContext.fillStyle = color;
+        canvasContext.arc(centerX, centerY, radius, 0, 2 * Math.PI, true);
+        canvasContext.fill();
+    };
+</script>
