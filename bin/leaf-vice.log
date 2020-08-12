@@ -51,7 +51,6 @@ Error - CRT header invalid.
 CART: 'leaf.prg' is not a valid CRT file.
 AUTOSTART: Loading PRG file `leaf.prg' with direct RAM injection.
 AUTOSTART: Resetting the machine to autostart '*'
-AUTOSTART: Turning Warp mode on
 AUTOSTART: `leaf.prg' recognized as program/p00 file.
 Main CPU: starting at ($FFFC).
 Main CPU: RESET.
@@ -59,9 +58,8 @@ Sound: Opened device `dx', speed 44100Hz, fragment size 5.8ms, buffer size 104ms
 reSID: MOS8580, filter on, sampling rate 44100Hz - resampling, pass to 19845Hz
 reSID: MOS8580, filter on, sampling rate 44100Hz - resampling, pass to 19845Hz
 Drive 8: RESET.
-AUTOSTART: Injecting program data at $0801 (size $2b00)
+AUTOSTART: Injecting program data at $0801 (size $34ff)
 AUTOSTART: Ready
-AUTOSTART: Turning Warp mode off
 AUTOSTART: Starting program.
 AUTOSTART: Done.
 Writing configuration file `C:\Users\admin\AppData\Roaming\vice\3.1\vice.ini'.

@@ -9,8 +9,8 @@ Memory Map
 ----------
 Default-segment:
   $0801-$080c Basic
-  $080e-$086f Basic End
-  $1000-$3300 Unnamed
+  $080e-$0872 Basic End
+  $1000-$3cff Unnamed
 
 Writing Vice symbol file: leaf.vs
 Writing Symbol file: leaf.sym
