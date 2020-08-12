@@ -1,4 +1,4 @@
-## "Leaf" a small onefile demo from Samar Production 
+## "Leaf" a small C-64 onefile demo from Samar Production 
 
 ### Example of ["Barnsley fern" fractal](https://en.wikipedia.org/wiki/Barnsley_fern)
 
