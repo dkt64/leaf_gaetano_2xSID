@@ -7,13 +7,13 @@
 // ; !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 // ;==========================================================
 
-.const 	T1 		= $10 // 16-bit input
-.const 	T2 		= $12 // 16-bit input
-.const 	PRODUCT 		= $14 // 32-bit result
+// .const 	T1 		= $10 // 16-bit input
+// .const 	T2 		= $12 // 16-bit input
+// .const 	PRODUCT 		= $14 // 32-bit result
 
-.const 	T32_1 		= $18 // 32-bit input
-.const 	T32_2 		= $1c // 32-bit input
-.const 	PRODUCT32 	= $20 // 32-bit result
+// .const 	T32_1 		= $18 // 32-bit input
+// .const 	T32_2 		= $1c // 32-bit input
+// .const 	PRODUCT32 	= $20 // 32-bit result
 
 // ;==========================================================
 // ; Multiply tables generator by Graham
@@ -284,6 +284,8 @@ multiply_16bit_signed:
 // ;==========================================================
 multiply_32bit_unsigned:
 
+	// $ffff.FFFF
+	// $ffff.FFFF
 	lda T32_1+0
 	sta T1+0
 	lda T32_1+1
@@ -294,12 +296,90 @@ multiply_32bit_unsigned:
 	sta T2+1
 	sec
 	jsr multiply_16bit_unsigned
+
+	lda #0
+	sta PRODUCT32+2
+	sta PRODUCT32+3
+
+	lda PRODUCT+2
+	sta PRODUCT32+0
+	lda PRODUCT+3
+	sta PRODUCT32+1
+
+	// $FFFF.ffff
+	// $ffff.FFFF
+	lda T32_1+2
+	sta T1+0
+	lda T32_1+3
+	sta T1+1
+	lda T32_2+0
+	sta T2+0
+	lda T32_2+1
+	sta T2+1
+	sec
+	jsr multiply_16bit_unsigned
+
+	clc
+	lda PRODUCT+0
+	adc PRODUCT32+0
+	sta PRODUCT32+0
+	lda PRODUCT+1
+	adc PRODUCT32+1
+	sta PRODUCT32+1
+	lda PRODUCT+2
+	adc PRODUCT32+2
+	sta PRODUCT32+2
+	lda PRODUCT+3
+	adc PRODUCT32+3
+	sta PRODUCT32+3
+
+	// $ffff.FFFF
+	// $FFFF.ffff
+	lda T32_1+0
+	sta T1+0
+	lda T32_1+1
+	sta T1+1
 	lda T32_2+2
 	sta T2+0
 	lda T32_2+3
 	sta T2+1
 	sec
 	jsr multiply_16bit_unsigned
+
+	clc
+	lda PRODUCT+0
+	adc PRODUCT32+0
+	sta PRODUCT32+0
+	lda PRODUCT+1
+	adc PRODUCT32+1
+	sta PRODUCT32+1
+	lda PRODUCT+2
+	adc PRODUCT32+2
+	sta PRODUCT32+2
+	lda PRODUCT+3
+	adc PRODUCT32+3
+	sta PRODUCT32+3
+
+	// $FFFF.ffff
+	// $FFFF.ffff
+	lda T32_1+2
+	sta T1+0
+	lda T32_1+3
+	sta T1+1
+	lda T32_2+2
+	sta T2+0
+	lda T32_2+3
+	sta T2+1
+	sec
+	jsr multiply_16bit_unsigned
+
+	clc
+	lda PRODUCT+0
+	adc PRODUCT32+2
+	sta PRODUCT32+2
+	lda PRODUCT+1
+	adc PRODUCT32+3
+	sta PRODUCT32+3
 
 	rts
 
