@@ -1,25 +1,25 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"type": "shell",
-			"label": "Build kickass leaf.asm",
-			"command": "java",
-			"args": [
-				"-jar",
-				"C:\\priv\\c64\\pc-tools\\KickAssembler\\KickAss.jar",
-				"-odir",
-				"./bin",
-				"-log",
-				"buildlog.txt",
-				"-showmem",
-				"-debugdump",
-				"-vicesymbols",
-				"leaf.asm"
-			],
-			"options": {
-				"cwd": "${workspaceFolder}"
-			}
-		}
-	]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "shell",
+      "label": "Build kickass leaf.asm",
+      "command": "java",
+      "args": [
+        "-jar",
+        "C:\\c64\\pc-tools\\KickAssembler\\KickAss.jar",
+        "-odir",
+        "./bin",
+        "-log",
+        "buildlog.txt",
+        "-showmem",
+        "-debugdump",
+        "-vicesymbols",
+        "leaf.asm"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
+    }
+  ]
 }
