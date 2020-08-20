@@ -1,0 +1,3690 @@
+;==========================================================
+; "Unreal" by Samar Productions
+; Small one-file demo for Stary Piernik 2016
+; Code by Don Kichote
+; Gfx by Isildur
+; Msx by Jammer
+; 2016-05-12
+;==========================================================
+
+	!to "unreal.prg",cbm
+
+;TESTY_MAIN
+	
+;----------------------------------------------------------
+; Zeropage
+;----------------------------------------------------------
+
+; tl time low, th time hi
+tl		= $02
+th		= $03
+
+dist_ptr		= $04
+dist_ptr_l	= dist_ptr
+dist_ptr_h	= dist_ptr+1
+
+plot_ptr		= $06
+plot_ptr_l	= plot_ptr
+plot_ptr_h	= plot_ptr+1
+plot_lo		= plot_ptr_l
+plot_hi		= plot_ptr_h
+
+x0		= $08
+y0		= $09
+x1		= $0a
+y1		= $0b
+dx		= $0c
+dy		= $0d
+delta		= $0e
+delta2		= $0f
+
+ptr1		= $10
+ptr1l		= ptr1
+ptr1h		= ptr1+1
+ptr2		= $12
+ptr2l		= ptr2
+ptr2h		= ptr2+1
+
+pattern_ptr	= $14
+pattenr_ptrl	= pattern_ptr
+pattenr_ptrh	= pattern_ptr+1
+
+kod_ptr		= $16
+kod_ptrl		= kod_ptr
+kod_ptrh		= kod_ptr+1
+
+x_1 = x0
+y_1 = y0
+x_2 = x1
+y_2 = y1
+
+;----------------------------------------------------------
+; Stałe
+;----------------------------------------------------------
+
+stab_irq_line	= $30
+irq2_line	= $ff
+
+scr_dist_src	= $3400
+scr_dist_dst	= $0400
+bmp_dist		= $3800
+ban_dist		= $03
+
+scr_main		= $4000
+bmp_main		= $6000
+ban_main		= $02
+
+scr_unreal	= $8000
+bmp_unreal	= $a000
+ban_unreal	= $01
+
+bmp_main_src	= $e000
+
+bmp 		= bmp_main
+bmp2 		= bmp_unreal
+ofs1 		= $140*04+8*13
+
+spr_heart1_reg	= $43f8
+spr_heart2_reg	= $83f8
+spr_heart1_data	= $4400
+spr_heart2_data	= $8400
+
+kod_kreski	= $8800
+
+;----------------------------------------------------------
+; Makra
+;----------------------------------------------------------
+
+	!source "libs\makra.asm"
+	!source "libs\macro_wait.asm"
+
+;==========================================================
+; Start programu BASIC
+;==========================================================
+
+	* = $0801
+	!byte $0b,$08,$01,$00,$9e
+	!text "2064"
+	!byte $00
+	* = $0810
+	jmp program
+
+;==========================================================
+; Program
+;==========================================================
+
+!align 255,0
+
+program
+	sei
+	cld
+	+SYNC
+	lda #$00
+	sta $d011
+	sta $d015
+	sta $d020
+	sta $d021
+	sta tl
+	sta th
+	jsr $1000
+	lda #$35
+	sta $01
+	
+	lda #<kod_kreski
+	sta kod_ptrl
+	lda #>kod_kreski
+	sta kod_ptrh
+	
+;----------------------------------------------------------
+
+	ldx #$00
+	lda #$ff
+-	sta scr_dist_dst+$000,x
+	sta scr_dist_dst+$100,x
+	sta scr_dist_dst+$200,x
+	sta scr_dist_dst+$300,x
+	inx
+	bne -
+	
+	lda #$0f
+-	sta $d800,x
+	sta $d900,x
+	sta $da00,x
+	sta $db00,x
+	inx
+	bne -
+
+	lda # (((scr_dist_dst & $3fff) / $0400) << 4) + (((bmp_dist & $3fff) / $0800) << 1)
+	sta $d018
+	
+	; przekodowanie głównej bitmapy
+	
+	;jmp dal2
+	
+	lda #<scr_main
+	sta ptr1l
+	lda #>scr_main
+	sta ptr1h
+	lda #<bmp_main
+	sta ptr2l
+	lda #>bmp_main
+	sta ptr2h
+	
+	jsr dekod_roz
+	
+	jmp dal2
+	
+	ldx #$00
+	lda #$01
+-	sta scr_main+$000,x
+	sta scr_main+$100,x
+	sta scr_main+$200,x
+	sta scr_main+$300,x
+	inx
+	bne -
+dal
+
+	+FILL_MEM bmp_main, $20, $00
+dal2
+	
+;----------------------------------------------------------
+
+	lda #$1b
+	sta $d011
+
+	lda #$7f
+	sta $dc0d
+	sta $dd0d
+	lda $dc0d
+	lda $dd0d
+	lda #$01
+	sta $d01a
+
+	lda #<nmi
+	sta $fffc
+	sta $fffa
+	lda #>nmi
+	sta $fffd
+	sta $fffb
+	 
+	+IRQ_SETUP stab_irq, stab_irq_line
+
+;==========================================================
+
+	+SYNC 
+
+	cli
+	!ifdef TESTY_MAIN{
+kopiuj1	lda #1
+	} else {
+kopiuj1	lda #0
+	}
+	
+	beq kopiuj1
+	; kopiowanie w wolne miejsce ekranu main w celu doublebufferingu
+	+COPY_MEM scr_main, scr_unreal, 4
+	+COPY_MEM bmp_main, bmp_unreal, $20
+	;+FILL_MEM bmp_main_src, $1f, $aa
+	+COPY_MEM bmp_main, bmp_main_src, $1f
+
+main_screen
+	!ifdef TESTY_MAIN{
+	lda #1
+	}else{
+	lda #0
+	}
+	beq main_screen
+	
+main_loop
+	lda #$fd
+	cmp $d012
+	bne *-3
+	
+	;dec $d020
+	
+	lda #1
+	sta buf
+	
+	jsr clear2
+	
+	;dec $d020
+
+	lda #>plot_add_y_hi2
+	sta buf_pl1+2
+	sta buf_pl2+2
+	sta kbuf_pl1+2
+	sta kbuf_pl2+2
+	
+	jsr rysuj
+
+	lda #$00
+	;sta $d020
+	
+	lda #$fd
+	cmp $d012
+	bne *-3
+	
+	;dec $d020
+	
+	lda #2
+	sta buf
+	
+	jsr clear1
+	
+	;dec $d020
+
+	lda #>plot_add_y_hi
+	sta buf_pl1+2
+	sta buf_pl2+2
+	sta kbuf_pl1+2
+	sta kbuf_pl2+2
+	
+	jsr rysuj
+	
+	lda #$00
+	;sta $d020
+	
+	jmp main_loop
+
+;==========================================================
+
+dekod_zolty
+	ldy #$00
+	lda (ptr1),y
+	cmp #$e0
+	bne +
+	lda #$0e
+	sta (ptr1),y
+	jmp neg
++	cmp #$65
+	bne +
+	lda #$36
+	sta (ptr1),y
+	jmp neg
++	cmp #$6e
+	bne +
+	lda #$e6
+	sta (ptr1),y
+	jmp neg
++	cmp #$e5
+	bne +
+	lda #$3e
+	sta (ptr1),y
+	jmp neg
++	cmp #$5e
+	bne +
+	lda #$e3
+	sta (ptr1),y
+	jmp neg
++	cmp #$ea
+	bne +
+	lda #$7e ; 7e
+	sta (ptr1),y
+	jmp neg
++	cmp #$ae
+	bne +
+	lda #$7e ; 7e
+	sta (ptr1),y
+	jmp cont
++	cmp #$56
+	bne +
+	lda #$65
+	sta (ptr1),y
+	jmp neg
++	cmp #$66
+	bne +
+	lda #$e6
+	sta (ptr1),y
+	jmp neg
++	cmp #$ae
+	bne +
+	lda #$e7 ; e7
+	sta (ptr1),y
+	jmp neg
++	cmp #$06
+	bne +
+	lda #$60
+	sta (ptr1),y
+	jmp neg
++	cmp #$00
+	bne +
+	lda (ptr2),y
+	bne +
+	jmp neg
++	
+cont
+	inc ptr1l
+	bne +
+	inc ptr1h
++	lda ptr2l
+	clc
+	adc #8
+	sta ptr2l
+	lda ptr2h
+	adc #0
+	sta ptr2h
+	
+	lda ptr1h
+	cmp #>(scr_main+$400)
+	beq +
+	jmp dekod_zolty
++
+	
+	jmp end1
+
+neg
+	ldy #$07
+-	lda (ptr2),y
+	eor #$ff
+	sta (ptr2),y
+	dey
+	bpl -
+	jmp dekod_zolty
+
+end1	rts
+
+	; ------------------------
+	
+dekod_roz
+	ldy #$00
+	lda (ptr1),y
+	cmp #$e0
+	bne +
+	lda #$0e
+	sta (ptr1),y
+	jmp neg2
++	cmp #$65
+	bne +
+	lda #$56
+	sta (ptr1),y
+	jmp neg2
++	cmp #$6e
+	bne +
+	lda #$e6
+	sta (ptr1),y
+	jmp neg2
++	cmp #$e5
+	bne +
+	lda #$5e
+	sta (ptr1),y
+	jmp neg2
+;+	cmp #$5e
+;	bne +
+;	lda #$e5
+;	sta (ptr1),y
+;	jmp neg2
++	cmp #$ea
+	bne +
+	lda #$ae ; 7e
+	sta (ptr1),y
+	jmp neg2
+;+	cmp #$ae
+;	bne +
+;	lda #$7e ; 7e
+;	sta (ptr1),y
+;	jmp cont2
+;+	cmp #$56
+;	bne +
+;	lda #$65
+;	sta (ptr1),y
+;	jmp neg2
++	cmp #$66
+	bne +
+	lda #$e6
+	sta (ptr1),y
+	jmp neg2
+;+	cmp #$ae
+;	bne +
+;	lda #$e7 ; e7
+;	sta (ptr1),y
+;	jmp neg2
++	cmp #$06
+	bne +
+	lda #$60
+	sta (ptr1),y
+	jmp neg2
++	cmp #$00
+	bne +
+	lda (ptr2),y
+	bne +
+	jmp neg2
++	
+cont2
+	inc ptr1l
+	bne +
+	inc ptr1h
++	lda ptr2l
+	clc
+	adc #8
+	sta ptr2l
+	lda ptr2h
+	adc #0
+	sta ptr2h
+	
+	lda ptr1h
+	cmp #>(scr_main+$400)
+	beq +
+	jmp dekod_roz
++
+	
+	jmp end2
+
+neg2
+	ldy #$07
+-	lda (ptr2),y
+	eor #$ff
+	sta (ptr2),y
+	dey
+	bpl -
+	jmp dekod_roz
+
+end2	rts
+
+;==========================================================
+; Sprajty - heart - main screen
+;==========================================================
+
+spr_logo_x	= $82
+spr_logo_y	= $64
+
+set_spr_logo
+
+	lda #$ff
+	sta $d015
+	sta $d017
+	sta $d01d
+	
+	lda #spr_logo_x
+	sta $d000
+	clc
+	adc #2
+	sta $d002
+	adc #2
+	sta $d004
+	adc #2
+	sta $d006
+	adc #2
+	sta $d008
+	adc #2
+	sta $d00a
+	adc #2
+	sta $d00c
+	adc #2
+	sta $d00e
+	
+	lda #spr_logo_y
+	sta $d001
+	sta $d003
+	sta $d005
+	sta $d007
+	sta $d009
+	sta $d00b
+	sta $d00d
+	sta $d00f
+	
+	ldx #7
+-	lda spr_kolory,x
+	sta $d027,x
+	dex
+	bpl -
+
+	ldx #(spr_data/$40)
+	stx scr_dist_dst+$03f8
+	inx
+	stx scr_dist_dst+$03f9
+	inx
+	stx scr_dist_dst+$03fa
+	inx
+	stx scr_dist_dst+$03fb
+	inx
+	stx scr_dist_dst+$03fc
+	inx
+	stx scr_dist_dst+$03fd
+	inx
+	stx scr_dist_dst+$03fe
+	inx
+	stx scr_dist_dst+$03ff
+	
+	; czyszczenie
+	
+	ldx #3*21
+	lda #0
+-	sta spr_data+$40*0,x
+	sta spr_data+$40*1,x
+	sta spr_data+$40*2,x
+	sta spr_data+$40*3,x
+	sta spr_data+$40*4,x
+	sta spr_data+$40*5,x
+	sta spr_data+$40*6,x
+	sta spr_data+$40*7,x
+	dex
+	dex
+	dex
+	bpl -
+
+	; spr1
+	ldx #0
+sp1	ldy spr_sin+00
+-	inx
+	inx
+	inx
+	dey
+	bpl -
+	lda #$80
+-	sta spr_data+$40*0,x
+	inx
+	inx
+	inx
+	cpx spr_y1+0
+	bne -
+	
+	; spr2
+	ldx #0
+sp2	ldy spr_sin+10
+-	inx
+	inx
+	inx
+	dey
+	bpl -
+	lda #$80
+-	sta spr_data+$40*1,x
+	inx
+	inx
+	inx
+	cpx spr_y1+1
+	bne -
+	
+	; spr1
+	ldx #0
+sp3	ldy spr_sin+20
+-	inx
+	inx
+	inx
+	dey
+	bpl -
+	lda #$80
+-	sta spr_data+$40*2,x
+	inx
+	inx
+	inx
+	cpx spr_y1+2
+	bne -
+	
+	; spr2
+	ldx #0
+sp4	ldy spr_sin+30
+-	inx
+	inx
+	inx
+	dey
+	bpl -
+	lda #$80
+-	sta spr_data+$40*3,x
+	inx
+	inx
+	inx
+	cpx spr_y1+3
+	bne -
+	
+	; spr1
+	ldx #0
+sp5	ldy spr_sin+40
+-	inx
+	inx
+	inx
+	dey
+	bpl -
+	lda #$80
+-	sta spr_data+$40*4,x
+	inx
+	inx
+	inx
+	cpx spr_y1+4
+	bne -
+	
+	; spr2
+	ldx #0
+sp6	ldy spr_sin+50
+-	inx
+	inx
+	inx
+	dey
+	bpl -
+	lda #$80
+-	sta spr_data+$40*5,x
+	inx
+	inx
+	inx
+	cpx spr_y1+5
+	bne -
+	
+	; spr1
+	ldx #0
+sp7	ldy spr_sin+60
+-	inx
+	inx
+	inx
+	dey
+	bpl -
+	lda #$80
+-	sta spr_data+$40*6,x
+	inx
+	inx
+	inx
+	cpx spr_y1+6
+	bne -
+	
+	; spr2
+	ldx #0
+sp8	ldy spr_sin+70
+-	inx
+	inx
+	inx
+	dey
+	bpl -
+	lda #$80
+-	sta spr_data+$40*7,x
+	inx
+	inx
+	inx
+	cpx spr_y1+7
+	bne -
+	
+	inc sp1+1
+	inc sp2+1
+	inc sp3+1
+	inc sp4+1
+	inc sp5+1
+	inc sp6+1
+	inc sp7+1
+	inc sp8+1
+	
+	rts
+
+spr_kolory
+	!byte 1,2,3,4,5,6,7,8
+
+spr_y0
+	!byte 1,2,3,4,5,6,7,8
+spr_y1
+	!byte 3*19,3*20,3*20,3*21,3*21,3*20,3*20,3*19
+	
+;==========================================================
+; Sprajty - heart - main screen
+;==========================================================
+
+spr_heart_up_x	= $45
+spr_heart_up_y	= $63
+spr_heart_down_x	= $45
+spr_heart_down_y	= $bb
+
+set_spr_heart
+
+	lda #$03
+	sta $d015
+	lda #0
+	sta $d017
+	sta $d01d
+	;sta $d01b
+	
+	lda #spr_heart_up_x
+	sta $d000
+	lda #spr_heart_up_y
+	sta $d001
+	
+	lda #spr_heart_down_x
+	sta $d002
+	lda #spr_heart_down_y
+	sta $d003	
+		
+	lda #$06
+	sta $d027
+	lda #$00
+	sta $d028
+	
+	lda $dc01
+	cmp #$ff
+	beq +
+	lda #$00
+	sta heart_up_anim_cnt
++
+	
+	ldx heart_up_anim_cnt
+	lda heart_up_anim_tab,x	
+	;lda #((spr_heart1_data/$40)+0)
+	sta spr_heart1_reg
+	;lda #((spr_heart1_data/$40)+5)
+	ldx heart_down_anim_cnt
+	lda heart_down_anim_tab,x	
+	sta spr_heart1_reg+1
+	
+	ldx heart_up_anim_cnt
+	lda heart_up_anim_tab,x	
+	sta spr_heart2_reg
+	;lda #((spr_heart2_data/$40)+5)
+	ldx heart_down_anim_cnt
+	lda heart_down_anim_tab,x	
+	sta spr_heart2_reg+1
+	
+	dec mrug_cnt+1
+mrug_cnt	
+	lda #6
+	bne ++
+	lda #6
+	sta mrug_cnt+1
+	
+	lda heart_up_anim_cnt
+	cmp heart_up_anim_cnt_max
+	beq +
+
+	inc heart_up_anim_cnt
+	
++
+	
+	lda heart_down_anim_cnt
+	cmp heart_down_anim_cnt_max
+	beq +
+
+	inc heart_down_anim_cnt
+	
++
+++
+	rts
+	
+heart_up_anim_cnt
+	!byte 11
+heart_up_anim_cnt_max
+	!byte 11
+	
+heart_down_anim_cnt
+	!byte 11
+heart_down_anim_cnt_max
+	!byte 11
+
+heart_up_anim_tab
+	!byte ((spr_heart1_data&$3fff)/$40)+0,((spr_heart1_data&$3fff)/$40)+1,((spr_heart1_data&$3fff)/$40)+2,((spr_heart1_data&$3fff)/$40)+3
+	!byte ((spr_heart1_data&$3fff)/$40)+4,((spr_heart1_data&$3fff)/$40)+4,((spr_heart1_data&$3fff)/$40)+3,((spr_heart1_data&$3fff)/$40)+2
+	!byte ((spr_heart1_data&$3fff)/$40)+1,((spr_heart1_data&$3fff)/$40)+0,((spr_heart1_data&$3fff)/$40)+0,((spr_heart1_data&$3fff)/$40)+0
+
+heart_down_anim_tab
+	!byte ((spr_heart2_data&$3fff)/$40)+0,((spr_heart2_data&$3fff)/$40)+1,((spr_heart2_data&$3fff)/$40)+2,((spr_heart2_data&$3fff)/$40)+3
+	!byte ((spr_heart2_data&$3fff)/$40)+4,((spr_heart2_data&$3fff)/$40)+4,((spr_heart2_data&$3fff)/$40)+3,((spr_heart2_data&$3fff)/$40)+2
+	!byte ((spr_heart2_data&$3fff)/$40)+1,((spr_heart2_data&$3fff)/$40)+0,((spr_heart2_data&$3fff)/$40)+0,((spr_heart2_data&$3fff)/$40)+0
+
+;==========================================================
+	
+zmiana_paternu
+	inc patnr1+1
+	inc patnr2+1
+	
+	lda patnr1+1
+	cmp #4
+	bne +
+	lda #0
+	sta patnr1+1
+	sta patnr2+1
++
+	lda lp_patt
+	clc
+	adc #100
+	sta lp_patt
+	lda lp_patt+1
+	adc #1
+	sta lp_patt+1
+
+	lda #$20
+	sta wl_prad
+	sta wl_kres
+	rts
+
+;==========================================================
+; Rysowanie linii
+;==========================================================
+
+rysuj	
+
+patnr1	ldx #0
+	lda patterns_lo,x
+	clc
+kr1	adc #0
+	sta kkres1+1
+	sta kkres2+1
+	lda patterns_hi,x
+	sta kkres1+2
+	sta kkres2+2
+	
+	jsr rysuj_kreski_dookola_gora
+	
+patnr2	ldx #0
+	lda patterns_lo,x
+	clc
+kr2	adc #0
+	sta kkres1+1
+	sta kkres2+1
+	lda patterns_hi,x
+	sta kkres1+2
+	sta kkres2+2
+
+	jsr rysuj_kreski_dookola_dol
+
+	
+	
+	dec kr1+1
+	dec kr2+1
+	
+kr3	lda #<kreski2
+	sta kkres1+1
+	sta kkres2+1
+	lda #>kreski2
+	sta kkres1+2
+	sta kkres2+2
+
+wl_kres	lda rysuj_kreski_dolne
+	
+	inc kr3+1
+	
+	lda #<kreski_prad
+	sta kkres1+1
+	sta kkres2+1
+	lda #>kreski_prad
+	sta kkres1+2
+	sta kkres2+2
+
+wl_prad	lda rysuj_prad
+wl_troj	lda rysuj_trojkaty
+
+	jsr rysuj_srodek
+
+	rts
+
+patterns_lo
+	!byte <kreski1,<kreski2,<kreski3,<kreski4
+patterns_hi
+	!byte >kreski1,>kreski2,>kreski3,>kreski4
+	
+
+;==========================================================
+; Muza
+;==========================================================
+
+muza_przed
+	* = $1000
+	!bin "data\Illbient.sid",,$7e
+muza_koniec
+
+;==========================================================
+; Rysowanie linii - trójkąty
+;==========================================================
+
+tr1x	= 14
+tr1y	= 52
+
+tr2x	= 14
+tr2y	= 90
+
+tr3x	= 98
+tr3y	= 52
+
+tr4x	= 98
+tr4y	= 90
+
+;----------------------------------------------------------
+
+rysuj_trojkaty
+
+;----------------------------------------------------------
+; tr1
+
+; bok1
+
+	ldx kat1
+	
+	lda #tr1x
+	clc
+	adc sin10,x
+	sec
+	sbc #5
+	sta x0
+	
+	lda #tr1y
+	clc
+	adc sin10+$20,x
+	sec
+	sbc #5
+	sta y0
+
+	lda #tr1x
+	clc
+	adc sin10+40,x
+	sec
+	sbc #5
+	sta x1
+	
+	lda #tr1y
+	clc
+	adc sin10+$20+40,x
+	sec
+	sbc #5
+	sta y1
+	
+	jsr line
+
+; bok2
+
+	ldx kat1
+	
+	lda #tr1x
+	clc
+	adc sin10+40,x
+	sec
+	sbc #5
+	sta x0
+	
+	lda #tr1y
+	clc
+	adc sin10+$20+40,x
+	sec
+	sbc #5
+	sta y0
+
+	lda #tr1x
+	clc
+	adc sin10+80,x
+	sec
+	sbc #5
+	sta x1
+	
+	lda #tr1y
+	clc
+	adc sin10+$20+80,x
+	sec
+	sbc #5
+	sta y1
+	
+	jsr line
+	
+; bok3
+
+	ldx kat1
+	
+	lda #tr1x
+	clc
+	adc sin10+80,x
+	sec
+	sbc #5
+	sta x0
+	
+	lda #tr1y
+	clc
+	adc sin10+$20+80,x
+	sec
+	sbc #5
+	sta y0
+
+	lda #tr1x
+	clc
+	adc sin10+128,x
+	sec
+	sbc #5
+	sta x1
+	
+	lda #tr1y
+	clc
+	adc sin10+$20+128,x
+	sec
+	sbc #5
+	sta y1
+	
+	jsr line
+
+kat1_index
+	ldx #0
+	lda kat_sin_tab,x
+	sec
+	sbc #8
+	sta kat1_add
+	inc kat1_index+1
+	
+	lda kat1
+	clc
+	adc kat1_add
+	and #$7f
+	sta kat1
+	
+;----------------------------------------------------------
+; tr2
+
+; bok1
+
+	ldx kat2
+	
+	lda #tr2x
+	clc
+	adc sin10,x
+	sec
+	sbc #5
+	sta x0
+	
+	lda #tr2y
+	clc
+	adc sin10+$20,x
+	sec
+	sbc #5
+	sta y0
+
+	lda #tr2x
+	clc
+	adc sin10+40,x
+	sec
+	sbc #5
+	sta x1
+	
+	lda #tr2y
+	clc
+	adc sin10+$20+40,x
+	sec
+	sbc #5
+	sta y1
+	
+	jsr line
+
+; bok2
+
+	ldx kat2
+	
+	lda #tr2x
+	clc
+	adc sin10+40,x
+	sec
+	sbc #5
+	sta x0
+	
+	lda #tr2y
+	clc
+	adc sin10+$20+40,x
+	sec
+	sbc #5
+	sta y0
+
+	lda #tr2x
+	clc
+	adc sin10+80,x
+	sec
+	sbc #5
+	sta x1
+	
+	lda #tr2y
+	clc
+	adc sin10+$20+80,x
+	sec
+	sbc #5
+	sta y1
+	
+	jsr line
+	
+; bok3
+
+	ldx kat2
+	
+	lda #tr2x
+	clc
+	adc sin10+80,x
+	sec
+	sbc #5
+	sta x0
+	
+	lda #tr2y
+	clc
+	adc sin10+$20+80,x
+	sec
+	sbc #5
+	sta y0
+
+	lda #tr2x
+	clc
+	adc sin10+128,x
+	sec
+	sbc #5
+	sta x1
+	
+	lda #tr2y
+	clc
+	adc sin10+$20+128,x
+	sec
+	sbc #5
+	sta y1
+	
+	jsr line
+
+kat2_index
+	ldx #0
+	lda kat_sin_tab,x
+	eor #$ff
+	and #$0f
+	sec
+	sbc #8
+	sta kat2_add
+	inc kat2_index+1
+
+	lda kat2
+	clc
+	adc kat2_add
+	and #$7f
+	sta kat2
+
+;----------------------------------------------------------
+; tr3
+
+; bok1
+
+	ldx kat3
+	
+	lda #tr3x
+	clc
+	adc sin10,x
+	sec
+	sbc #5
+	sta x0
+	
+	lda #tr3y
+	clc
+	adc sin10+$20,x
+	sec
+	sbc #5
+	sta y0
+
+	lda #tr3x
+	clc
+	adc sin10+40,x
+	sec
+	sbc #5
+	sta x1
+	
+	lda #tr3y
+	clc
+	adc sin10+$20+40,x
+	sec
+	sbc #5
+	sta y1
+	
+	jsr line
+
+; bok2
+
+	ldx kat3
+	
+	lda #tr3x
+	clc
+	adc sin10+40,x
+	sec
+	sbc #5
+	sta x0
+	
+	lda #tr3y
+	clc
+	adc sin10+$20+40,x
+	sec
+	sbc #5
+	sta y0
+
+	lda #tr3x
+	clc
+	adc sin10+80,x
+	sec
+	sbc #5
+	sta x1
+	
+	lda #tr3y
+	clc
+	adc sin10+$20+80,x
+	sec
+	sbc #5
+	sta y1
+	
+	jsr line
+	
+; bok3
+
+	ldx kat3
+	
+	lda #tr3x
+	clc
+	adc sin10+80,x
+	sec
+	sbc #5
+	sta x0
+	
+	lda #tr3y
+	clc
+	adc sin10+$20+80,x
+	sec
+	sbc #5
+	sta y0
+
+	lda #tr3x
+	clc
+	adc sin10+128,x
+	sec
+	sbc #5
+	sta x1
+	
+	lda #tr3y
+	clc
+	adc sin10+$20+128,x
+	sec
+	sbc #5
+	sta y1
+	
+	jsr line
+
+kat3_index
+	ldx #0
+	lda kat_sin_tab,x
+	sec
+	sbc #8
+	sta kat3_add
+	inc kat3_index+1
+
+	lda kat3
+	clc
+	adc kat3_add
+	and #$7f
+	sta kat3
+	
+;----------------------------------------------------------
+; tr4
+
+; bok1
+
+	ldx kat4
+	
+	lda #tr4x
+	clc
+	adc sin10,x
+	sec
+	sbc #5
+	sta x0
+	
+	lda #tr4y
+	clc
+	adc sin10+$20,x
+	sec
+	sbc #5
+	sta y0
+
+	lda #tr4x
+	clc
+	adc sin10+40,x
+	sec
+	sbc #5
+	sta x1
+	
+	lda #tr4y
+	clc
+	adc sin10+$20+40,x
+	sec
+	sbc #5
+	sta y1
+	
+	jsr line
+
+; bok2
+
+	ldx kat4
+	
+	lda #tr4x
+	clc
+	adc sin10+40,x
+	sec
+	sbc #5
+	sta x0
+	
+	lda #tr4y
+	clc
+	adc sin10+$20+40,x
+	sec
+	sbc #5
+	sta y0
+
+	lda #tr4x
+	clc
+	adc sin10+80,x
+	sec
+	sbc #5
+	sta x1
+	
+	lda #tr4y
+	clc
+	adc sin10+$20+80,x
+	sec
+	sbc #5
+	sta y1
+	
+	jsr line
+	
+; bok3
+
+	ldx kat4
+	
+	lda #tr4x
+	clc
+	adc sin10+80,x
+	sec
+	sbc #5
+	sta x0
+	
+	lda #tr4y
+	clc
+	adc sin10+$20+80,x
+	sec
+	sbc #5
+	sta y0
+
+	lda #tr4x
+	clc
+	adc sin10+128,x
+	sec
+	sbc #5
+	sta x1
+	
+	lda #tr4y
+	clc
+	adc sin10+$20+128,x
+	sec
+	sbc #5
+	sta y1
+	
+	jsr line
+
+kat4_index
+	ldx #0
+	lda kat_sin_tab,x
+	eor #$ff
+	and #$0f
+	sec
+	sbc #8
+	sta kat4_add
+	inc kat4_index+1
+
+	lda kat4
+	clc
+	adc kat4_add
+	and #$7f
+	sta kat4
+
+;----------------------------------------------------------
+
+	rts
+
+;----------------------------------------------------------
+
+kat1	!byte $10
+kat2	!byte $70
+kat3	!byte $30
+kat4	!byte $50
+
+kat1_add	!byte $04
+kat2_add	!byte $fc
+kat3_add	!byte $04
+kat4_add	!byte $fc
+
+!align 255,0
+sin10
+	!byte 0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1
+	!byte 1,1,2,2,2,2,3,3,3,4,4,4,4,5,5,5
+	!byte 6,6,6,6,7,7,7,8,8,8,8,9,9,9,9,10
+	!byte 10,10,10,10,11,11,11,11,11,11,11,11,11,11,11,11
+	!byte 11,11,11,11,11,11,11,11,11,11,11,11,10,10,10,10
+	!byte 10,9,9,9,9,8,8,8,8,7,7,7,6,6,6,6
+	!byte 5,5,5,4,4,4,4,3,3,3,2,2,2,2,1,1
+	!byte 1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0
+	!byte 0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1
+	!byte 1,1,2,2,2,2,3,3,3,4,4,4,4,5,5,5
+	!byte 6,6,6,6,7,7,7,8,8,8,8,9,9,9,9,10
+	!byte 10,10,10,10,11,11,11,11,11,11,11,11,11,11,11,11
+	!byte 11,11,11,11,11,11,11,11,11,11,11,11,10,10,10,10
+	!byte 10,9,9,9,9,8,8,8,8,7,7,7,6,6,6,6
+	!byte 5,5,5,4,4,4,4,3,3,3,2,2,2,2,1,1
+	!byte 1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0
+	!byte 0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1
+	!byte 1,1,2,2,2,2,3,3,3,4,4,4,4,5,5,5
+	!byte 6,6,6,6,7,7,7,8,8,8,8,9,9,9,9,10
+	!byte 10,10,10,10,11,11,11,11,11,11,11,11,11,11,11,11
+	!byte 11,11,11,11,11,11,11,11,11,11,11,11,10,10,10,10
+	!byte 10,9,9,9,9,8,8,8,8,7,7,7,6,6,6,6
+	!byte 5,5,5,4,4,4,4,3,3,3,2,2,2,2,1,1
+	!byte 1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0
+
+!align 255,0
+kat_sin_tab
+	!byte 0,0,0,0,0,0,1,1,2,3,3,4,5,5,6,7
+	!byte 8,8,9,10,11,11,12,13,13,14,14,15,15,15,15,15
+	!byte 15,15,15,15,15,14,14,13,13,12,12,11,10,9,8,8
+	!byte 7,6,5,5,4,3,3,2,1,1,0,0,0,0,0,0
+	!fill $c0,0
+	
+;==========================================================
+; Rysowanie linii - kreski dookoła
+;==========================================================
+
+rysuj_kreski_dookola_gora
+
+; góra
+
+	lda #14
+	sta x0
+	lda #72
+	sta y0
+	lda #14
+	sta x1
+	lda #63
+	sta y1
+	jsr kline
+
+	lda #20
+	sta x0
+	lda #44
+	sta y0
+	lda #56
+	sta x1
+	lda #8
+	sta y1
+	jsr kline
+	
+	lda #56
+	sta x0
+	lda #8
+	sta y0
+	lda #92
+	sta x1
+	lda #44
+	sta y1
+	jsr kline
+
+	lda #98
+	sta x0
+	lda #64
+	sta y0
+	lda #98
+	sta x1
+	lda #72
+	sta y1
+	jsr kline
+
+	rts
+
+rysuj_kreski_dookola_dol
+
+; dół
+
+	lda #14
+	sta x0
+	lda #71
+	sta y0
+	lda #14
+	sta x1
+	lda #80
+	sta y1
+	jsr kline
+
+	lda #20
+	sta x0
+	lda #99
+	sta y0
+	lda #56
+	sta x1
+	lda #135
+	sta y1
+	jsr kline
+
+	lda #56
+	sta x0
+	lda #135
+	sta y0
+	lda #92
+	sta x1
+	lda #99
+	sta y1
+	jsr kline
+
+	lda #98
+	sta x0
+	lda #79
+	sta y0
+	lda #98
+	sta x1
+	lda #71
+	sta y1
+	jsr kline
+
+	rts
+
+; Zakres rysowania -> X: 0..$6f, Y: 0..$8f
+	
+
+;==========================================================
+; Rysowanie linii - kreski dookoła
+;==========================================================
+
+rysuj_kreski_dolne
+
+	lda #30
+	sta x0
+	lda #80
+	sta y0
+	lda #30
+	sta x1
+	lda #90
+	sta y1
+	jsr kline
+	
+	lda #30
+	sta x0
+	lda #90
+	sta y0
+	lda #56
+	sta x1
+	lda #116
+	sta y1
+	jsr kline
+
+	lda #56
+	sta x0
+	lda #116
+	sta y0
+	lda #82
+	sta x1
+	lda #90
+	sta y1
+	jsr kline
+
+	lda #82
+	sta x0
+	lda #90
+	sta y0
+	lda #82
+	sta x1
+	lda #80
+	sta y1
+	jsr kline
+
+	rts
+
+;==========================================================
+; Rysowanie linii - prąd
+;==========================================================
+
+rysuj_prad
+
+;----------------------------------------------------------
+; Linie stałe przerywane
+
+	lda #30
+	sta x0
+	lda #61
+	sta y0
+	lda #30
+	sta x1
+	lda #51
+	sta y1
+	jsr kline
+
+	lda #30
+	sta x0
+	lda #51
+	sta y0
+	lda #56
+	sta x1
+	lda #25
+	sta y1
+	jsr kline
+
+	lda #56
+	sta x0
+	lda #25
+	sta y0
+	lda #82
+	sta x1
+	lda #51
+	sta y1
+	jsr kline
+
+	lda #82
+	sta x0
+	lda #51
+	sta y0
+	lda #82
+	sta x1
+	lda #62
+	sta y1
+	jsr kline
+
+;----------------------------------------------------------
+; Linie ruchome
+
+; Lewa
+
+	lda #30
+	sta x0
+	lda #58
+	sta y0
+	ldx prad1
+	lda unreal_dist_tab,x
+	and #$03
+	sec
+	sbc #2
+	adc #30
+	sta x1
+	lda #56
+	sta y1
+	jsr line
+
+	ldx prad1
+	lda unreal_dist_tab,x
+	and #$03
+	sec
+	sbc #2
+	adc #30
+	sta x0
+	sta x0
+	lda #56
+	sta y0
+	lda #30
+	sta x1
+	lda #54
+	sta y1
+	jsr line
+	
+; Prawa
+
+	lda #82
+	sta x0
+	lda #58
+	sta y0
+	ldx prad2
+	lda unreal_dist_tab,x
+	and #$03
+	sec
+	sbc #2
+	adc #82
+	sta x1
+	lda #56
+	sta y1
+	jsr line
+
+	ldx prad2
+	lda unreal_dist_tab,x
+	and #$03
+	sec
+	sbc #2
+	adc #82
+	sta x0
+	sta x0
+	lda #56
+	sta y0
+	lda #82
+	sta x1
+	lda #54
+	sta y1
+	jsr line
+
+; 1 lewa od dołu
+
+	lda #32
+	sta x0
+	lda #49
+	sta y0
+	
+	ldx prad3
+	lda unreal_dist_tab,x
+	and #$07
+	tay
+	lda trans_x_lewy,y
+	clc
+	adc #34
+	sta x1
+	
+	lda #47
+	clc
+	adc trans_y_lewy,y
+	sta y1
+	
+	jsr line
+
+	ldx prad3
+	lda unreal_dist_tab,x
+	and #$07
+	tay
+	lda trans_x_lewy,y
+	clc
+	adc #34
+	sta x0
+	
+	lda #47
+	clc
+	adc trans_y_lewy,y
+	sta y0
+	
+	lda #36
+	sta x1
+	lda #45
+	sta y1
+	
+	jsr line
+
+; 2
+
+	lda #40
+	sta x0
+	lda #41
+	sta y0
+	
+	ldx prad4
+	lda unreal_dist_tab,x
+	and #$07
+	tay
+	lda trans_x_lewy,y
+	clc
+	adc #42
+	sta x1
+	
+	lda #39
+	clc
+	adc trans_y_lewy,y
+	sta y1
+	
+	jsr line
+
+	ldx prad4
+	lda unreal_dist_tab,x
+	and #$07
+	tay
+	lda trans_x_lewy,y
+	clc
+	adc #42
+	sta x0
+	
+	lda #39
+	clc
+	adc trans_y_lewy,y
+	sta y0
+	
+	lda #44
+	sta x1
+	lda #37
+	sta y1
+	
+	jsr line
+
+; 3
+
+	lda #48
+	sta x0
+	lda #33
+	sta y0
+	
+	ldx prad5
+	lda unreal_dist_tab,x
+	and #$07
+	tay
+	lda trans_x_lewy,y
+	clc
+	adc #50
+	sta x1
+	
+	lda #31
+	clc
+	adc trans_y_lewy,y
+	sta y1
+	
+	jsr line
+
+	ldx prad5
+	lda unreal_dist_tab,x
+	and #$07
+	tay
+	lda trans_x_lewy,y
+	clc
+	adc #50
+	sta x0
+	
+	lda #31
+	clc
+	adc trans_y_lewy,y
+	sta y0
+	
+	lda #52
+	sta x1
+	lda #29
+	sta y1
+	
+	jsr line
+
+; 4 prawa od góry
+
+	lda #60
+	sta x0
+	lda #29
+	sta y0
+	
+	ldx prad6
+	lda unreal_dist_tab,x
+	and #$07
+	tay
+	lda trans_x_prawy,y
+	clc
+	adc #62
+	sta x1
+	
+	lda #31
+	clc
+	adc trans_y_prawy,y
+	sta y1
+	
+	jsr line
+
+	ldx prad6
+	lda unreal_dist_tab,x
+	and #$07
+	tay
+	lda trans_x_prawy,y
+	clc
+	adc #62
+	sta x0
+	
+	lda #31
+	clc
+	adc trans_y_prawy,y
+	sta y0
+	
+	lda #64
+	sta x1
+	lda #33
+	sta y1
+	
+	jsr line
+
+; 5
+
+	lda #68
+	sta x0
+	lda #37
+	sta y0
+	
+	ldx prad7
+	lda unreal_dist_tab,x
+	and #$07
+	tay
+	lda trans_x_prawy,y
+	clc
+	adc #70
+	sta x1
+	
+	lda #39
+	clc
+	adc trans_y_prawy,y
+	sta y1
+	
+	jsr line
+
+	ldx prad7
+	lda unreal_dist_tab,x
+	and #$07
+	tay
+	lda trans_x_prawy,y
+	clc
+	adc #70
+	sta x0
+	
+	lda #39
+	clc
+	adc trans_y_prawy,y
+	sta y0
+	
+	lda #72
+	sta x1
+	lda #41
+	sta y1
+	
+	jsr line
+
+; 6
+
+	lda #76
+	sta x0
+	lda #45
+	sta y0
+	
+	ldx prad7
+	lda unreal_dist_tab,x
+	and #$07
+	tay
+	lda trans_x_prawy,y
+	clc
+	adc #78
+	sta x1
+	
+	lda #47
+	clc
+	adc trans_y_prawy,y
+	sta y1
+	
+	jsr line
+
+	ldx prad7
+	lda unreal_dist_tab,x
+	and #$07
+	tay
+	lda trans_x_prawy,y
+	clc
+	adc #78
+	sta x0
+	
+	lda #47
+	clc
+	adc trans_y_prawy,y
+	sta y0
+	
+	lda #80
+	sta x1
+	lda #49
+	sta y1
+	
+	jsr line
+
+;----------------------------------------------------------
+
+	inc prad1
+	inc prad2
+	inc prad3
+	inc prad4
+	inc prad5
+	inc prad6
+	inc prad7
+	inc prad8
+	rts
+
+;----------------------------------------------------------
+
+prad1
+	!byte 0
+prad2
+	!byte 2
+prad3
+	!byte 4
+prad4
+	!byte 6
+prad5
+	!byte 8
+prad6
+	!byte 10
+prad7
+	!byte 12
+prad8
+	!byte 14
+
+trans_x_lewy
+	!byte $ff,$ff,$ff,$00,$01,$01,$01,$01
+trans_y_lewy
+	!byte $ff,$ff,$ff,$00,$01,$01,$01,$01
+
+trans_x_prawy
+	!byte $ff,$ff,$ff,$01,$00,$01,$01,$01
+trans_y_prawy
+	!byte $01,$01,$01,$01,$00,$ff,$ff,$ff
+
+!align 255,0
+kreski_prad
+	!byte 1,1,1,0,0,0,0,1,1,1,1
+	!byte 1,1,0,0,0,1,1,1
+	!byte 1,1,0,0,0,1,1,1
+	!byte 1,1,0,0,0,1,1,1
+	!byte 1,1,1
+	!byte 1,1,1,0,0,0,1,1
+	!byte 1,1,1,0,0,0,1,1
+	!byte 1,1,1,0,0,0,1,1
+	!byte 1,1,1,1,0,0,0,0,1,1,1
+
+;==========================================================
+; Rysowanie linii - środek
+;==========================================================
+
+srx	= $38
+sry	= $48
+
+;----------------------------------------------------------
+
+rysuj_srodek
+
+;----------------------------------------------------------
+; L1
+
+	ldx katsr1
+	
+	lda #srx
+	clc
+	adc sin40,x
+	sec
+	sbc #15
+	sta x0
+	
+	lda #sry
+	clc
+	adc sin40+$20,x
+	sec
+	sbc #15
+	sta y0
+
+	lda #srx
+	clc
+	adc sin40+10,x
+	sec
+	sbc #15
+	sta x1
+	
+	lda #sry
+	clc
+	adc sin40+$20+10,x
+	sec
+	sbc #15
+	sta y1
+	
+	jsr line
+	
+	inc katsr1
+	inc katsr1
+	lda katsr1
+	and #$7f
+	sta katsr1
+
+;----------------------------------------------------------
+; L2
+
+	ldx katsr2
+	
+	lda #srx
+	clc
+	adc sin40,x
+	sec
+	sbc #15
+	sta x0
+	
+	lda #sry
+	clc
+	adc sin40+$20,x
+	sec
+	sbc #15
+	sta y0
+
+	lda #srx
+	clc
+	adc sin40+10,x
+	sec
+	sbc #15
+	sta x1
+	
+	lda #sry
+	clc
+	adc sin40+$20+10,x
+	sec
+	sbc #15
+	sta y1
+	
+	jsr line
+	
+	inc katsr2
+	inc katsr2
+	lda katsr2
+	and #$7f
+	sta katsr2
+
+;----------------------------------------------------------
+; L3
+
+	ldx katsr3
+	
+	lda #srx
+	clc
+	adc sin40,x
+	sec
+	sbc #15
+	sta x0
+	
+	lda #sry
+	clc
+	adc sin40+$20,x
+	sec
+	sbc #15
+	sta y0
+
+	lda #srx
+	clc
+	adc sin40+10,x
+	sec
+	sbc #15
+	sta x1
+	
+	lda #sry
+	clc
+	adc sin40+$20+10,x
+	sec
+	sbc #15
+	sta y1
+	
+	jsr line
+	
+	inc katsr3
+	inc katsr3
+	lda katsr3
+	and #$7f
+	sta katsr3
+
+;----------------------------------------------------------
+; L4
+
+	ldx katsr4
+	
+	lda #srx
+	clc
+	adc sin40,x
+	sec
+	sbc #15
+	sta x0
+	
+	lda #sry
+	clc
+	adc sin40+$20,x
+	sec
+	sbc #15
+	sta y0
+
+	lda #srx
+	clc
+	adc sin40+10,x
+	sec
+	sbc #15
+	sta x1
+	
+	lda #sry
+	clc
+	adc sin40+$20+10,x
+	sec
+	sbc #15
+	sta y1
+	
+	jsr line
+	
+	inc katsr4
+	inc katsr4
+	lda katsr4
+	and #$7f
+	sta katsr4
+
+;----------------------------------------------------------
+; L5
+
+	ldx katsr5
+	
+	lda #srx
+	clc
+	adc sin40,x
+	sec
+	sbc #15
+	sta x0
+	
+	lda #sry
+	clc
+	adc sin40+$20,x
+	sec
+	sbc #15
+	sta y0
+
+	lda #srx
+	clc
+	adc sin40+10,x
+	sec
+	sbc #15
+	sta x1
+	
+	lda #sry
+	clc
+	adc sin40+$20+10,x
+	sec
+	sbc #15
+	sta y1
+	
+	jsr line
+	
+	inc katsr5
+	inc katsr5
+	lda katsr5
+	and #$7f
+	sta katsr5
+
+;----------------------------------------------------------
+; L6
+
+	ldx katsr6
+	
+	lda #srx
+	clc
+	adc sin40,x
+	sec
+	sbc #15
+	sta x0
+	
+	lda #sry
+	clc
+	adc sin40+$20,x
+	sec
+	sbc #15
+	sta y0
+
+	lda #srx
+	clc
+	adc sin40+10,x
+	sec
+	sbc #15
+	sta x1
+	
+	lda #sry
+	clc
+	adc sin40+$20+10,x
+	sec
+	sbc #15
+	sta y1
+	
+	jsr line
+	
+	inc katsr6
+	inc katsr6
+	lda katsr6
+	and #$7f
+	sta katsr6
+
+;----------------------------------------------------------
+
+	rts
+
+;----------------------------------------------------------
+
+katsr1
+	!byte (128/6)*0
+katsr2
+	!byte (128/6)*1
+katsr3
+	!byte (128/6)*2
+katsr4
+	!byte (128/6)*3
+katsr5
+	!byte (128/6)*4
+katsr6
+	!byte (128/6)*5
+	
+!align 255,0
+sin40
+	!byte 0,0,0,0,0,0,0,0,1,1,1,2,2,3,3,4
+	!byte 4,5,5,6,6,7,8,8,9,10,11,11,12,13,14,14
+	!byte 15,16,17,17,18,19,20,20,21,22,23,23,24,24,25,26
+	!byte 26,27,27,28,28,28,29,29,29,30,30,30,30,30,30,30
+	!byte 30,30,30,30,30,30,30,29,29,29,28,28,28,27,27,26
+	!byte 26,25,24,24,23,23,22,21,20,20,19,18,17,17,16,15
+	!byte 14,14,13,12,11,11,10,9,8,8,7,6,6,5,5,4
+	!byte 4,3,3,2,2,1,1,1,0,0,0,0,0,0,0,0
+	!byte 0,0,0,0,0,0,0,0,1,1,1,2,2,3,3,4
+	!byte 4,5,5,6,6,7,8,8,9,10,11,11,12,13,14,14
+	!byte 15,16,17,17,18,19,20,20,21,22,23,23,24,24,25,26
+	!byte 26,27,27,28,28,28,29,29,29,30,30,30,30,30,30,30
+	!byte 30,30,30,30,30,30,30,29,29,29,28,28,28,27,27,26
+	!byte 26,25,24,24,23,23,22,21,20,20,19,18,17,17,16,15
+	!byte 14,14,13,12,11,11,10,9,8,8,7,6,6,5,5,4
+	!byte 4,3,3,2,2,1,1,1,0,0,0,0,0,0,0,0
+
+;==========================================================
+; IRQs
+;==========================================================
+
+!align 255,0
+
+nmi	rti
+	
+stab_irq
+	+IRQ_ENTRY
+	lda #$ff
+	sta $d019
+	lda #<stab_irq2
+	sta $fffe
+	lda #>stab_irq2
+	sta $ffff
+	inc $d012
+	tsx
+	cli
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+
+;----------------------------------------------------------
+; irq
+;----------------------------------------------------------
+
+stab_irq2
+
+	txs
+
+	ldx #$08
+	dex
+	bne *-1
+	bit $00
+
+	lda $d012
+	cmp $d012		; <- critical instruction (ZERO-Flag will indicate if Jitter = 0 or 1)
+				; CYCLECOUNT: [61 -> 62] <- Will not work if this timing is wrong
+				; cmp $d012 is originally a 5 cycle instruction but due to piplining tech. the
+				; 5th cycle responsible for calculating the result is executed simultaniously
+				; with the next OP fetch cycle (first cycle of beq *+2).
+				; Add one cycle if $d012 wasn't incremented (Jitter / ZERO-Flag = 0)
+	beq *+2
+	
+	; Stable code
+	; ================================================
+
+play_p2	jsr dummy_p
+
+	lda #$ff
+	sta $d019
+	
+	lda #irq2_line
+	sta $d012
+	lda #<irq2
+	sta $fffe
+	lda #>irq2
+	sta $ffff
+	+IRQ_EXIT
+
+;----------------------------------------------------------
+; irq
+;----------------------------------------------------------
+
+irq2
+
+	+IRQ_ENTRY
+
+	jsr $1003
+	inc tl
+	bne +
+	inc th
++
+
+	jsr play
+
+play_p3	jsr dummy_p
+
+	lda #<dummy_p
+	sta play_p3+1
+	lda #>dummy_p
+	sta play_p3+2
+	
+play_p1	jsr dummy_p
+	
+	lda #$ff
+	sta $d019
+
+	lda play_p2+1
+	cmp #<dummy_p
+	bne +
+	lda play_p2+2
+	cmp #>dummy_p
+	bne +
+	+IRQ_EXIT
+	
++
+	lda #stab_irq_line
+	sta $d012
+	lda #<stab_irq
+	sta $fffe
+	lda #>stab_irq
+	sta $ffff
+	+IRQ_EXIT
+	
+;==========================================================
+; Play
+;==========================================================
+
+play
+
+	ldy #0
+-	tya
+	asl
+	asl
+	asl
+	tax
+	lda play_tab,x
+	bne +
+	rts
++	cmp tl
+	bne +
+	lda play_tab+1,x
+	cmp th
+	bne +
+	lda play_tab+2,x
+	sta play_p1+1
+	lda play_tab+3,x
+	sta play_p1+2
+	lda play_tab+4,x
+	sta play_p2+1
+	lda play_tab+5,x
+	sta play_p2+2
+	lda play_tab+6,x
+	sta play_p3+1
+	lda play_tab+7,x
+	sta play_p3+2
++	iny
+	bne -
+
+dummy_p	rts
+	
+;==========================================================
+; Distortion
+;==========================================================
+
+dist_reg = $d016
+
+!align 255,0
+distorion
+
+	ldy #$00
+
+	+WAIT11
+-	
+	lda (dist_ptr),y
+	sta dist_reg
+	iny
+	+WAIT52
+	lda (dist_ptr),y
+	sta dist_reg
+	iny
+	+WAIT52
+	lda (dist_ptr),y
+	sta dist_reg
+	iny
+	+WAIT52
+	lda (dist_ptr),y
+	sta dist_reg
+	iny
+	+WAIT52
+	lda (dist_ptr),y
+	sta dist_reg
+	iny
+	+WAIT52
+	lda (dist_ptr),y
+	sta dist_reg
+	iny
+	+WAIT52
+	lda (dist_ptr),y
+	sta dist_reg
+	iny
+	+WAIT52
+	lda (dist_ptr),y
+	sta dist_reg
+	+WAIT02
+	iny
+	cpy #200
+	bcs +
+	jmp -
++
+
+	rts
+;==========================================================
+; FX
+;==========================================================
+
+dist_y_pos	= 10
+
+show_dist_samar0
+
+	jsr set_spr_logo
+
+	lda # (((scr_dist_dst & $3fff) / $0400) << 4) + (((bmp_dist & $3fff) / $0800) << 1)
+	sta $d018
+	lda #ban_dist
+	sta $dd00
+	lda #$1b
+	sta $d011
+	
+	ldy #$27
+	lda #$ff
+-	sta scr_dist_dst+$28*(dist_y_pos+0),y
+	sta scr_dist_dst+$28*(dist_y_pos+1),y
+	sta scr_dist_dst+$28*(dist_y_pos+2),y
+	sta scr_dist_dst+$28*(dist_y_pos+3),y
+	dey
+	bpl -
+	
+	ldx #13
+	ldy #25
+-	
+	lda scr_dist_src+$28*0,x
+	sta scr_dist_dst+$28*(dist_y_pos+0),y
+	lda scr_dist_src+$28*1,x
+	sta scr_dist_dst+$28*(dist_y_pos+1),y
+	lda scr_dist_src+$28*2,x
+	sta scr_dist_dst+$28*(dist_y_pos+2),y
+	lda scr_dist_src+$28*3,x
+	sta scr_dist_dst+$28*(dist_y_pos+3),y
+	dey
+	dex
+	bpl -
+
+	lda dist_ptr_h
+	cmp #>(unreal_dist_tab+15*$100)
+	beq +
+	inc dist_ptr_h
++
+	rts
+
+show_dist_samar2
+
+	lda #$00
+	sta $d015
+	lda #0
+	sta $d017
+	sta $d01d
+
+	lda # (((scr_dist_dst & $3fff) / $0400) << 4) + (((bmp_dist & $3fff) / $0800) << 1)
+	sta $d018
+	lda #ban_dist
+	sta $dd00
+	lda #$1b
+	sta $d011
+	
+	ldy #$27
+	lda #$ff
+-	sta scr_dist_dst+$28*(dist_y_pos+0),y
+	sta scr_dist_dst+$28*(dist_y_pos+1),y
+	sta scr_dist_dst+$28*(dist_y_pos+2),y
+	sta scr_dist_dst+$28*(dist_y_pos+3),y
+	dey
+	bpl -
+	
+	ldx #13
+	ldy #25
+-	
+	lda scr_dist_src+$28*0,x
+	sta scr_dist_dst+$28*(dist_y_pos+0),y
+	lda scr_dist_src+$28*1,x
+	sta scr_dist_dst+$28*(dist_y_pos+1),y
+	lda scr_dist_src+$28*2,x
+	sta scr_dist_dst+$28*(dist_y_pos+2),y
+	lda scr_dist_src+$28*3,x
+	sta scr_dist_dst+$28*(dist_y_pos+3),y
+	dey
+	dex
+	bpl -
+
+	lda dist_ptr_h
+	cmp #>(unreal_dist_tab+15*$100)
+	beq +
+	inc dist_ptr_h
++
+	rts
+
+;==========================================================
+
+show_dist_samar1
+
+	lda #$00
+	sta $d015
+	lda #0
+	sta $d017
+	sta $d01d
+
+	lda # (((scr_dist_dst & $3fff) / $0400) << 4) + (((bmp_dist & $3fff) / $0800) << 1)
+	sta $d018
+	lda #ban_dist
+	sta $dd00
+	lda #$1b
+	sta $d011
+	
+	ldy #$27
+	lda #$ff
+-	sta scr_dist_dst+$28*(dist_y_pos+0),y
+	sta scr_dist_dst+$28*(dist_y_pos+1),y
+	sta scr_dist_dst+$28*(dist_y_pos+2),y
+	sta scr_dist_dst+$28*(dist_y_pos+3),y
+	dey
+	bpl -
+
+	ldx #14
+	ldy #7
+-	
+	lda scr_dist_src+$28*0,x
+	sta scr_dist_dst+$28*(dist_y_pos+0),y
+	lda scr_dist_src+$28*1,x
+	sta scr_dist_dst+$28*(dist_y_pos+1),y
+	lda scr_dist_src+$28*2,x
+	sta scr_dist_dst+$28*(dist_y_pos+2),y
+	lda scr_dist_src+$28*3,x
+	sta scr_dist_dst+$28*(dist_y_pos+3),y
+	iny
+	inx
+	cpx #40
+	bne -
+
+	lda #1
+	sta kopiuj1+1
+	
+	lda dist_ptr_h
+	cmp #>(unreal_dist_tab+15*$100)
+	beq +
+	inc dist_ptr_h
++
+	rts
+
+;==========================================================
+
+show_dist_piernik0
+
+	lda #$00
+	sta $d015
+	lda #0
+	sta $d017
+	sta $d01d
+
+	lda # (((scr_dist_dst & $3fff) / $0400) << 4) + (((bmp_dist & $3fff) / $0800) << 1)
+	sta $d018
+	lda #ban_dist
+	sta $dd00
+	lda #$1b
+	sta $d011
+	
+	ldy #$27
+	lda #$ff
+-	sta scr_dist_dst+$28*(dist_y_pos+0),y
+	sta scr_dist_dst+$28*(dist_y_pos+1),y
+	sta scr_dist_dst+$28*(dist_y_pos+2),y
+	sta scr_dist_dst+$28*(dist_y_pos+3),y
+	dey
+	bpl -
+	
+	ldx #11
+	ldy #25
+-	
+	lda scr_dist_src+$28*4,x
+	sta scr_dist_dst+$28*(dist_y_pos+0),y
+	dey
+	dex
+	bpl -
+
+	rts
+
+;==========================================================
+
+show_dist_piernik1
+
+	lda #$00
+	sta $d015
+	lda #0
+	sta $d017
+	sta $d01d
+
+	lda # (((scr_dist_dst & $3fff) / $0400) << 4) + (((bmp_dist & $3fff) / $0800) << 1)
+	sta $d018
+	lda #ban_dist
+	sta $dd00
+	lda #$1b
+	sta $d011
+	
+	ldy #$27
+	lda #$ff
+-	sta scr_dist_dst+$28*(dist_y_pos+0),y
+	sta scr_dist_dst+$28*(dist_y_pos+1),y
+	sta scr_dist_dst+$28*(dist_y_pos+2),y
+	sta scr_dist_dst+$28*(dist_y_pos+3),y
+	dey
+	bpl -
+
+	ldx #12
+	ldy #11
+-	
+	lda scr_dist_src+$28*4,x
+	sta scr_dist_dst+$28*(dist_y_pos+0),y
+	iny
+	inx
+	cpx #40
+	bne -
+
+	rts
+
+;==========================================================
+
+show_dist_credits0
+
+	lda #$00
+	sta $d015
+
+	lda # (((scr_dist_dst & $3fff) / $0400) << 4) + (((bmp_dist & $3fff) / $0800) << 1)
+	sta $d018
+	lda #ban_dist
+	sta $dd00
+	lda #$1b
+	sta $d011
+	
+	ldy #$27
+	lda #$ff
+-	sta scr_dist_dst+$28*(dist_y_pos+0),y
+	sta scr_dist_dst+$28*(dist_y_pos+1),y
+	sta scr_dist_dst+$28*(dist_y_pos+2),y
+	sta scr_dist_dst+$28*(dist_y_pos+3),y
+	dey
+	bpl -
+	
+	ldx #11
+	ldy #25
+-	
+	lda scr_dist_src+$28*5,x
+	sta scr_dist_dst+$28*(dist_y_pos+0),y
+	lda scr_dist_src+$28*6,x
+	sta scr_dist_dst+$28*(dist_y_pos+1),y
+	dey
+	dex
+	bpl -
+
+	rts
+
+;==========================================================
+
+show_dist_credits1
+
+	lda #$00
+	sta $d015
+
+	lda # (((scr_dist_dst & $3fff) / $0400) << 4) + (((bmp_dist & $3fff) / $0800) << 1)
+	sta $d018
+	lda #ban_dist
+	sta $dd00
+	lda #$1b
+	sta $d011
+	
+	ldy #$27
+	lda #$ff
+-	sta scr_dist_dst+$28*(dist_y_pos+0),y
+	sta scr_dist_dst+$28*(dist_y_pos+1),y
+	sta scr_dist_dst+$28*(dist_y_pos+2),y
+	sta scr_dist_dst+$28*(dist_y_pos+3),y
+	dey
+	bpl -
+
+	ldx #12
+	ldy #11
+-	
+	lda scr_dist_src+$28*5,x
+	sta scr_dist_dst+$28*(dist_y_pos+0),y
+	lda scr_dist_src+$28*6,x
+	sta scr_dist_dst+$28*(dist_y_pos+1),y
+	iny
+	inx
+	cpx #40
+	bne -
+
+	rts
+
+;==========================================================
+
+init_unreal
+
+	lda #<unreal_dist_tab
+	sta dist_ptr_l
+	lda #>unreal_dist_tab
+	sta dist_ptr_h
+
+	rts
+	
+show_unreal
+	lda # (((scr_unreal & $3fff) / $0400) << 4) + (((bmp_unreal & $3fff) / $0800) << 1)
+	sta $d018
+	lda #ban_unreal
+	sta $dd00
+	lda #$3b
+	sta $d011
+	lda #$0c
+	sta $d016
+	
+	lda dist_ptr_h
+	cmp #>(unreal_dist_tab+15*$100)
+	beq +
+	inc dist_ptr_h
++
+	rts
+
+anim_unreal
+
+	ldx #$09
+	dex
+	bne *-1
+	jsr distorion
+	ldx #$09
+	dex
+	bne *-1
+	lda #$00
+	sta $d020
+	rts
+
+;==========================================================
+	
+show_main
+
+	jsr set_spr_heart
+
+	lda #1
+	sta main_screen+1
+
+	lda buf
+	cmp #2
+	beq show_buf2
+	
+;----------------------------------------------------------
+
+show_buf1
+	lda # (((scr_main & $3fff) / $0400) << 4) + (((bmp_main & $3fff) / $0800) << 1)
+	sta $d018
+	lda #ban_main
+	sta $dd00
+	lda #$3b
+	sta $d011
+	lda #$08
+	sta $d016
+	
+	rts
+
+show_buf2
+	lda # (((scr_unreal & $3fff) / $0400) << 4) + (((bmp_unreal & $3fff) / $0800) << 1)
+	sta $d018
+	lda #ban_unreal
+	sta $dd00
+	lda #$3b
+	sta $d011
+	lda #$08
+	sta $d016
+	
+	rts
+
+;==========================================================
+	
+mrug
+	lda #0
+	sta heart_up_anim_cnt
+	sta heart_down_anim_cnt
+	
+	lda lp_mrug
+	clc
+	adc #100
+	sta lp_mrug
+	lda lp_mrug+1
+	adc #1
+	sta lp_mrug+1
+	
+	lda #$20
+	sta wl_troj
+	rts
+	
+;==========================================================
+; Clear1
+;==========================================================
+
+clear1
+	ldx #$0f
+-
+	lda bmp_main_src+$140*4+8*19,x
+	sta bmp+$140*4+8*19,x
+	lda bmp_main_src+$140*21+8*19,x
+	sta bmp+$140*21+8*19,x
+	dex
+	bpl -
+
+	ldx #$17
+-
+	lda bmp_main_src+$140*6+8*17,x
+	sta bmp+$140*6+8*17,x
+	lda bmp_main_src+$140*6+8*20,x
+	sta bmp+$140*6+8*20,x
+	lda bmp_main_src+$140*19+8*17,x
+	sta bmp+$140*19+8*17,x
+	lda bmp_main_src+$140*19+8*20,x
+	sta bmp+$140*19+8*20,x
+	dex
+	bpl -
+
+	ldx #$1f
+-
+	lda bmp_main_src+$140*5+8*18,x
+	sta bmp+$140*5+8*18,x
+	lda bmp_main_src+$140*7+8*16,x
+	sta bmp+$140*7+8*16,x
+	lda bmp_main_src+$140*7+8*20,x
+	sta bmp+$140*7+8*20,x
+	lda bmp_main_src+$140*18+8*16,x
+	sta bmp+$140*18+8*16,x
+	lda bmp_main_src+$140*18+8*20,x
+	sta bmp+$140*18+8*20,x
+	lda bmp_main_src+$140*20+8*18,x
+	sta bmp+$140*20+8*18,x
+	dex
+	bpl -
+
+	ldx #$6f
+-
+	lda bmp_main_src+$140*8+8*13,x
+	sta bmp+$140*8+8*13,x
+	lda bmp_main_src+$140*9+8*13,x
+	sta bmp+$140*9+8*13,x
+	lda bmp_main_src+$140*10+8*13,x
+	sta bmp+$140*10+8*13,x
+	lda bmp_main_src+$140*11+8*13,x
+	sta bmp+$140*11+8*13,x
+	lda bmp_main_src+$140*12+8*13,x
+	sta bmp+$140*12+8*13,x
+	lda bmp_main_src+$140*15+8*13,x
+	sta bmp+$140*15+8*13,x
+	lda bmp_main_src+$140*16+8*13,x
+	sta bmp+$140*16+8*13,x
+	lda bmp_main_src+$140*17+8*13,x
+	sta bmp+$140*17+8*13,x
+
+	;lda bmp_main_src+$140*13+8*13,x
+	;sta bmp+$140*13+8*13,x
+	;lda bmp_main_src+$140*13+8*23,x
+	;sta bmp+$140*13+8*23,x
+	;lda bmp_main_src+$140*14+8*13,x
+	;sta bmp+$140*14+8*13,x
+	;lda bmp_main_src+$140*14+8*23,x
+	;sta bmp+$140*14+8*23,x
+
+	lda bmp_main_src+$140*13+8*13,x
+	sta bmp+$140*13+8*13,x
+	lda bmp_main_src+$140*14+8*13,x
+	sta bmp+$140*14+8*13,x
+	dex
+	bpl -
+	rts
+
+;==========================================================
+; Clear2
+;==========================================================
+
+clear2
+	ldx #$0f
+-
+	lda bmp_main_src+$140*4+8*19,x
+	sta bmp2+$140*4+8*19,x
+	lda bmp_main_src+$140*21+8*19,x
+	sta bmp2+$140*21+8*19,x
+	dex
+	bpl -
+
+	ldx #$17
+-
+	lda bmp_main_src+$140*6+8*17,x
+	sta bmp2+$140*6+8*17,x
+	lda bmp_main_src+$140*6+8*20,x
+	sta bmp2+$140*6+8*20,x
+	lda bmp_main_src+$140*19+8*17,x
+	sta bmp2+$140*19+8*17,x
+	lda bmp_main_src+$140*19+8*20,x
+	sta bmp2+$140*19+8*20,x
+	dex
+	bpl -
+
+	ldx #$1f
+-
+	lda bmp_main_src+$140*5+8*18,x
+	sta bmp2+$140*5+8*18,x
+	lda bmp_main_src+$140*7+8*16,x
+	sta bmp2+$140*7+8*16,x
+	lda bmp_main_src+$140*7+8*20,x
+	sta bmp2+$140*7+8*20,x
+	;lda bmp_main_src+$140*13+8*13,x
+	;sta bmp2+$140*13+8*13,x
+	;lda bmp_main_src+$140*13+8*23,x
+	;sta bmp2+$140*13+8*23,x
+	;lda bmp_main_src+$140*14+8*13,x
+	;sta bmp2+$140*14+8*13,x
+	;lda bmp_main_src+$140*14+8*23,x
+	;sta bmp2+$140*14+8*23,x
+	lda bmp_main_src+$140*18+8*16,x
+	sta bmp2+$140*18+8*16,x
+	lda bmp_main_src+$140*18+8*20,x
+	sta bmp2+$140*18+8*20,x
+	lda bmp_main_src+$140*20+8*18,x
+	sta bmp2+$140*20+8*18,x
+	dex
+	bpl -
+
+	ldx #$6f
+-
+	lda bmp_main_src+$140*8+8*13,x
+	sta bmp2+$140*8+8*13,x
+	lda bmp_main_src+$140*9+8*13,x
+	sta bmp2+$140*9+8*13,x
+	lda bmp_main_src+$140*10+8*13,x
+	sta bmp2+$140*10+8*13,x
+	lda bmp_main_src+$140*11+8*13,x
+	sta bmp2+$140*11+8*13,x
+	lda bmp_main_src+$140*12+8*13,x
+	sta bmp2+$140*12+8*13,x
+	lda bmp_main_src+$140*15+8*13,x
+	sta bmp2+$140*15+8*13,x
+	lda bmp_main_src+$140*16+8*13,x
+	sta bmp2+$140*16+8*13,x
+	lda bmp_main_src+$140*17+8*13,x
+	sta bmp2+$140*17+8*13,x
+
+	lda bmp_main_src+$140*13+8*13,x
+	sta bmp2+$140*13+8*13,x
+	lda bmp_main_src+$140*14+8*13,x
+	sta bmp2+$140*14+8*13,x
+	dex
+	bpl -
+	rts
+
+;==========================================================
+; Plot
+;==========================================================
+
+line
+
+	lda x0
+	cmp x1
+	bne +
+	lda y0
+	cmp y1
+	bne +
+	rts
++
+
+	; Sprawdzamy kierunek linii - góra/dół
+	lda y0
+	cmp y1
+	bcc line_down
+	
+	; Obliczamy deltę y
+	lda y0
+	sbc y1
+	sta dy
+		
+	lda #$ce	; dec
+	sta kiery1
+	sta kiery2
+	
+	jmp line_down2
+	
+line_down
+	
+	; Obliczamy deltę y
+	lda y1
+	sec
+	sbc y0
+	sta dy
+	
+	lda #$ee	; inc
+	sta kiery1
+	sta kiery2
+	
+line_down2
+	
+	lda y0
+	sta lp1+1
+	sta lp2+1
+	lda y1
+	sta lp11+1
+
+	ldy #$e8		; inx
+	; Sprawdzamy kierunek linii - prawo/lewo
+	ldx x0
+	cpx x1
+	bcc +
+	
+	; linia w lewo
+	
+	lda x0		; delta x (odwrotna)
+	sbc x1
+	sta dx
+	
+	ldy #$ca		; dex
+	jmp ++
++
+	lda x1
+	sec
+	sbc x0
+	sta dx
+
+++	sty kierx1
+	sty kierx2
+
+	lda x1
+	sta kierx3+1
+	
+	; Sprawdzamy znaczącą oś - pion czy poziom
+	lda dx
+	cmp dy
+	bcs pozioma
+	
+	; --- Pionowa ---
+
+	lda dy
+	lsr
+	sta delta
+
+lp1	ldy #0
+lp11	cpy #0
+	beq +
+kiery1	inc lp1+1
+	
+	lda plot_add_y_lo,y
+	sta plot_ptr_l
+buf_pl1	lda plot_add_y_hi,y
+	sta plot_ptr_h
+	ldy plot_add_x,x
+	lda (plot_ptr),y
+	ora plot_mask,x
+	sta (plot_ptr),y
+++	lda delta
+	sec
+	sbc dx
+	sta delta
+	bcs lp1
+	adc dy
+	sta delta
+kierx1	inx
+	bne lp1
++
+	rts
+
+	; --- Pozioma ---
+
+pozioma
+
+	lsr
+	sta delta
+	
+lp2	ldy #0
+	lda plot_add_y_lo,y
+	sta plot_ptr_l
+buf_pl2	lda plot_add_y_hi,y
+	sta plot_ptr_h
+	ldy plot_add_x,x
+	lda (plot_ptr),y
+	ora plot_mask,x
+	sta (plot_ptr),y
+++	lda delta
+	sec
+	sbc dy
+	bcs +
+	adc dx
+kiery2	inc lp2+1
++	sta delta
+kierx2	inx
+kierx3	cpx #0
+	bne lp2
+	rts
+
+;==========================================================
+; Plot
+;==========================================================
+
+kline
+
+	lda x0
+	cmp x1
+	bne +
+	lda y0
+	cmp y1
+	bne +
+	rts
++
+
+	; Sprawdzamy kierunek linii - góra/dół
+	lda y0
+	cmp y1
+	bcc kline_down
+	
+	; Obliczamy deltę y
+	lda y0
+	sbc y1
+	sta dy
+		
+	lda #$ce	; dec
+	sta kkiery1
+	sta kkiery2
+	
+	jmp kline_down2
+	
+kline_down
+	
+	; Obliczamy deltę y
+	lda y1
+	sec
+	sbc y0
+	sta dy
+	
+	lda #$ee	; inc
+	sta kkiery1
+	sta kkiery2
+	
+kline_down2
+	
+	lda y0
+	sta klp1+1
+	sta klp2+1
+	lda y1
+	sta klp11+1
+
+	ldy #$e8		; inx
+	; Sprawdzamy kierunek linii - prawo/lewo
+	ldx x0
+	cpx x1
+	bcc +
+	
+	; linia w lewo
+	
+	lda x0		; delta x (odwrotna)
+	sbc x1
+	sta dx
+	
+	ldy #$ca		; dex
+	jmp ++
++
+	lda x1
+	sec
+	sbc x0
+	sta dx
+
+++	sty kkierx1
+	sty kkierx2
+
+	lda x1
+	sta kkierx3+1
+	
+	; Sprawdzamy znaczącą oś - pion czy poziom
+	lda dx
+	cmp dy
+	bcs kpozioma
+	
+	; --- Pionowa ---
+
+	lda dy
+	lsr
+	sta delta
+
+klp1	ldy #0
+klp11	cpy #0
+	beq +
+kkiery1	inc klp1+1
+	
+kkres1	lda kreski1
+	beq ++
+	
+	lda plot_add_y_lo,y
+	sta plot_ptr_l
+kbuf_pl1	lda plot_add_y_hi,y
+	sta plot_ptr_h
+	ldy plot_add_x,x
+	lda (plot_ptr),y
+	ora plot_mask,x
+	sta (plot_ptr),y
+++	inc kkres1+1
+	inc kkres2+1
+	lda delta
+	sec
+	sbc dx
+	sta delta
+	bcs klp1
+	adc dy
+	sta delta
+kkierx1	inx
+	bne klp1
++
+	rts
+
+	; --- Pozioma ---
+
+kpozioma
+
+	lsr
+	sta delta
+	
+kkres2	lda kreski1
+	beq ++
+
+klp2	ldy #0
+	lda plot_add_y_lo,y
+	sta plot_ptr_l
+kbuf_pl2	lda plot_add_y_hi,y
+	sta plot_ptr_h
+	ldy plot_add_x,x
+	lda (plot_ptr),y
+	ora plot_mask,x
+	sta (plot_ptr),y
+++	inc kkres1+1
+	inc kkres2+1
+	lda delta
+	sec
+	sbc dy
+	bcs +
+	adc dx
+kkiery2	inc klp2+1
++	sta delta
+kkierx2	inx
+kkierx3	cpx #0
+	bne kkres2
+	rts
+
+;==========================================================
+; Plot
+;==========================================================
+
+buf	!byte 0
+
+;==========================================================
+
+!align 63,0	
+spr_data
+	!fill $200,0
+
+	* = scr_dist_src
+_scr_dist_src
+	!bin "data\dist-map.bin",,
+	* = bmp_dist
+_bmp_dist
+	!bin "data\dist-chars.bin",,
+
+	* = scr_main
+_scr_main
+	!bin "data\main04-screen-poprawiony.bin",,
+	;!bin "data\main04.art",$3e8,$1f42
+	
+	* = spr_heart1_data
+	!bin "data\sprites_heart_up.bin",$140,
+	!bin "data\sprites_heart_down.bin",$140,
+	* = bmp_main
+_bmp_main
+	!bin "data\main04.art",$1f40,2
+
+	* = scr_unreal
+_scr_unreal
+	!bin "data\unreal.art",$3e8,$1f42
+	* = spr_heart2_data
+	!bin "data\sprites_heart_up.bin",$140,
+	!bin "data\sprites_heart_down.bin",$140,
+	
+
+;==========================================================
+; Dane
+;==========================================================
+
+play_tab
+	!ifdef TESTY_MAIN{
+	!word 20,show_main, dummy_p, dummy_p
+	!word 100,show_main, dummy_p, zmiana_paternu
+	!word 200,show_main, dummy_p, zmiana_paternu
+	!word 300,show_main, dummy_p, zmiana_paternu
+	!word 400,show_main, dummy_p, zmiana_paternu
+	!word 500,show_main, dummy_p, zmiana_paternu
+	
+	!word 50,show_main, dummy_p, mrug
+	!word 200,show_main, dummy_p, mrug
+	!word 400,show_main, dummy_p, mrug
+	!word 600,show_main, dummy_p, mrug
+	!word 0
+	}
+
+	!word 50,show_dist_credits1, dummy_p, dummy_p
+	!word 53,show_dist_credits0, dummy_p, dummy_p
+	!word 100,show_dist_piernik1, dummy_p, dummy_p
+	!word 103,show_dist_piernik0, dummy_p, dummy_p
+	!word 190,show_unreal, anim_unreal, init_unreal
+	!word 440,show_unreal, anim_unreal, init_unreal
+	!word 700,show_dist_samar1, anim_unreal, init_unreal
+	!word 710,show_dist_samar0, dummy_p, dummy_p
+	!word 950,show_dist_samar2, anim_unreal, init_unreal
+	!word 960,show_dist_samar2, anim_unreal, init_unreal
+	!word 970,show_dist_samar0, dummy_p, dummy_p
+	!word 1050,show_main, dummy_p, dummy_p
+
+lp_mrug	!word 1200,show_main, dummy_p, mrug
+	
+lp_patt	!word 1740,show_main, dummy_p, zmiana_paternu
+	
+	!byte 0
+
+!align 255,0
+plot_add_x
+	!byte 8*00,8*00,8*00,8*00,8*00,8*00,8*00,8*00
+	!byte 8*01,8*01,8*01,8*01,8*01,8*01,8*01,8*01
+	!byte 8*02,8*02,8*02,8*02,8*02,8*02,8*02,8*02
+	!byte 8*03,8*03,8*03,8*03,8*03,8*03,8*03,8*03
+	!byte 8*04,8*04,8*04,8*04,8*04,8*04,8*04,8*04
+	!byte 8*05,8*05,8*05,8*05,8*05,8*05,8*05,8*05
+	!byte 8*06,8*06,8*06,8*06,8*06,8*06,8*06,8*06
+	!byte 8*07,8*07,8*07,8*07,8*07,8*07,8*07,8*07
+	!byte 8*08,8*08,8*08,8*08,8*08,8*08,8*08,8*08
+	!byte 8*09,8*09,8*09,8*09,8*09,8*09,8*09,8*09
+	!byte 8*10,8*10,8*10,8*10,8*10,8*10,8*10,8*10
+	!byte 8*11,8*11,8*11,8*11,8*11,8*11,8*11,8*11
+	!byte 8*12,8*12,8*12,8*12,8*12,8*12,8*12,8*12
+	!byte 8*13,8*13,8*13,8*13,8*13,8*13,8*13,8*13
+	!byte 8*14,8*14,8*14,8*14,8*14,8*14,8*14,8*14
+	!byte 8*15,8*15,8*15,8*15,8*15,8*15,8*15,8*15
+
+!align 255,0
+plot_add_y_lo
+	!byte <(bmp+ofs1+$140*00+0),<(bmp+ofs1+$140*00+1),<(bmp+ofs1+$140*00+2),<(bmp+ofs1+$140*00+3),<(bmp+ofs1+$140*00+4),<(bmp+ofs1+$140*00+5),<(bmp+ofs1+$140*00+6),<(bmp+ofs1+$140*00+7)
+	!byte <(bmp+ofs1+$140*01+0),<(bmp+ofs1+$140*01+1),<(bmp+ofs1+$140*01+2),<(bmp+ofs1+$140*01+3),<(bmp+ofs1+$140*01+4),<(bmp+ofs1+$140*01+5),<(bmp+ofs1+$140*01+6),<(bmp+ofs1+$140*01+7)
+	!byte <(bmp+ofs1+$140*02+0),<(bmp+ofs1+$140*02+1),<(bmp+ofs1+$140*02+2),<(bmp+ofs1+$140*02+3),<(bmp+ofs1+$140*02+4),<(bmp+ofs1+$140*02+5),<(bmp+ofs1+$140*02+6),<(bmp+ofs1+$140*02+7)
+	!byte <(bmp+ofs1+$140*03+0),<(bmp+ofs1+$140*03+1),<(bmp+ofs1+$140*03+2),<(bmp+ofs1+$140*03+3),<(bmp+ofs1+$140*03+4),<(bmp+ofs1+$140*03+5),<(bmp+ofs1+$140*03+6),<(bmp+ofs1+$140*03+7)
+	!byte <(bmp+ofs1+$140*04+0),<(bmp+ofs1+$140*04+1),<(bmp+ofs1+$140*04+2),<(bmp+ofs1+$140*04+3),<(bmp+ofs1+$140*04+4),<(bmp+ofs1+$140*04+5),<(bmp+ofs1+$140*04+6),<(bmp+ofs1+$140*04+7)
+	!byte <(bmp+ofs1+$140*05+0),<(bmp+ofs1+$140*05+1),<(bmp+ofs1+$140*05+2),<(bmp+ofs1+$140*05+3),<(bmp+ofs1+$140*05+4),<(bmp+ofs1+$140*05+5),<(bmp+ofs1+$140*05+6),<(bmp+ofs1+$140*05+7)
+	!byte <(bmp+ofs1+$140*06+0),<(bmp+ofs1+$140*06+1),<(bmp+ofs1+$140*06+2),<(bmp+ofs1+$140*06+3),<(bmp+ofs1+$140*06+4),<(bmp+ofs1+$140*06+5),<(bmp+ofs1+$140*06+6),<(bmp+ofs1+$140*06+7)
+	!byte <(bmp+ofs1+$140*07+0),<(bmp+ofs1+$140*07+1),<(bmp+ofs1+$140*07+2),<(bmp+ofs1+$140*07+3),<(bmp+ofs1+$140*07+4),<(bmp+ofs1+$140*07+5),<(bmp+ofs1+$140*07+6),<(bmp+ofs1+$140*07+7)
+	!byte <(bmp+ofs1+$140*08+0),<(bmp+ofs1+$140*08+1),<(bmp+ofs1+$140*08+2),<(bmp+ofs1+$140*08+3),<(bmp+ofs1+$140*08+4),<(bmp+ofs1+$140*08+5),<(bmp+ofs1+$140*08+6),<(bmp+ofs1+$140*08+7)
+	!byte <(bmp+ofs1+$140*09+0),<(bmp+ofs1+$140*09+1),<(bmp+ofs1+$140*09+2),<(bmp+ofs1+$140*09+3),<(bmp+ofs1+$140*09+4),<(bmp+ofs1+$140*09+5),<(bmp+ofs1+$140*09+6),<(bmp+ofs1+$140*09+7)
+	!byte <(bmp+ofs1+$140*10+0),<(bmp+ofs1+$140*10+1),<(bmp+ofs1+$140*10+2),<(bmp+ofs1+$140*10+3),<(bmp+ofs1+$140*10+4),<(bmp+ofs1+$140*10+5),<(bmp+ofs1+$140*10+6),<(bmp+ofs1+$140*10+7)
+	!byte <(bmp+ofs1+$140*11+0),<(bmp+ofs1+$140*11+1),<(bmp+ofs1+$140*11+2),<(bmp+ofs1+$140*11+3),<(bmp+ofs1+$140*11+4),<(bmp+ofs1+$140*11+5),<(bmp+ofs1+$140*11+6),<(bmp+ofs1+$140*11+7)
+	!byte <(bmp+ofs1+$140*12+0),<(bmp+ofs1+$140*12+1),<(bmp+ofs1+$140*12+2),<(bmp+ofs1+$140*12+3),<(bmp+ofs1+$140*12+4),<(bmp+ofs1+$140*12+5),<(bmp+ofs1+$140*12+6),<(bmp+ofs1+$140*12+7)
+	!byte <(bmp+ofs1+$140*13+0),<(bmp+ofs1+$140*13+1),<(bmp+ofs1+$140*13+2),<(bmp+ofs1+$140*13+3),<(bmp+ofs1+$140*13+4),<(bmp+ofs1+$140*13+5),<(bmp+ofs1+$140*13+6),<(bmp+ofs1+$140*13+7)
+	!byte <(bmp+ofs1+$140*14+0),<(bmp+ofs1+$140*14+1),<(bmp+ofs1+$140*14+2),<(bmp+ofs1+$140*14+3),<(bmp+ofs1+$140*14+4),<(bmp+ofs1+$140*14+5),<(bmp+ofs1+$140*14+6),<(bmp+ofs1+$140*14+7)
+	!byte <(bmp+ofs1+$140*15+0),<(bmp+ofs1+$140*15+1),<(bmp+ofs1+$140*15+2),<(bmp+ofs1+$140*15+3),<(bmp+ofs1+$140*15+4),<(bmp+ofs1+$140*15+5),<(bmp+ofs1+$140*15+6),<(bmp+ofs1+$140*15+7)
+	!byte <(bmp+ofs1+$140*16+0),<(bmp+ofs1+$140*16+1),<(bmp+ofs1+$140*16+2),<(bmp+ofs1+$140*16+3),<(bmp+ofs1+$140*16+4),<(bmp+ofs1+$140*16+5),<(bmp+ofs1+$140*16+6),<(bmp+ofs1+$140*16+7)
+	!byte <(bmp+ofs1+$140*17+0),<(bmp+ofs1+$140*17+1),<(bmp+ofs1+$140*17+2),<(bmp+ofs1+$140*17+3),<(bmp+ofs1+$140*17+4),<(bmp+ofs1+$140*17+5),<(bmp+ofs1+$140*17+6),<(bmp+ofs1+$140*17+7)
+	!byte <(bmp+ofs1+$140*18+0),<(bmp+ofs1+$140*18+1),<(bmp+ofs1+$140*18+2),<(bmp+ofs1+$140*18+3),<(bmp+ofs1+$140*18+4),<(bmp+ofs1+$140*18+5),<(bmp+ofs1+$140*18+6),<(bmp+ofs1+$140*18+7)
+	!byte <(bmp+ofs1+$140*19+0),<(bmp+ofs1+$140*19+1),<(bmp+ofs1+$140*19+2),<(bmp+ofs1+$140*19+3),<(bmp+ofs1+$140*19+4),<(bmp+ofs1+$140*19+5),<(bmp+ofs1+$140*19+6),<(bmp+ofs1+$140*19+7)
+
+!align 255,0
+plot_add_y_hi
+	!byte >(bmp+ofs1+$140*00+0),>(bmp+ofs1+$140*00+1),>(bmp+ofs1+$140*00+2),>(bmp+ofs1+$140*00+3),>(bmp+ofs1+$140*00+4),>(bmp+ofs1+$140*00+5),>(bmp+ofs1+$140*00+6),>(bmp+ofs1+$140*00+7)
+	!byte >(bmp+ofs1+$140*01+0),>(bmp+ofs1+$140*01+1),>(bmp+ofs1+$140*01+2),>(bmp+ofs1+$140*01+3),>(bmp+ofs1+$140*01+4),>(bmp+ofs1+$140*01+5),>(bmp+ofs1+$140*01+6),>(bmp+ofs1+$140*01+7)
+	!byte >(bmp+ofs1+$140*02+0),>(bmp+ofs1+$140*02+1),>(bmp+ofs1+$140*02+2),>(bmp+ofs1+$140*02+3),>(bmp+ofs1+$140*02+4),>(bmp+ofs1+$140*02+5),>(bmp+ofs1+$140*02+6),>(bmp+ofs1+$140*02+7)
+	!byte >(bmp+ofs1+$140*03+0),>(bmp+ofs1+$140*03+1),>(bmp+ofs1+$140*03+2),>(bmp+ofs1+$140*03+3),>(bmp+ofs1+$140*03+4),>(bmp+ofs1+$140*03+5),>(bmp+ofs1+$140*03+6),>(bmp+ofs1+$140*03+7)
+	!byte >(bmp+ofs1+$140*04+0),>(bmp+ofs1+$140*04+1),>(bmp+ofs1+$140*04+2),>(bmp+ofs1+$140*04+3),>(bmp+ofs1+$140*04+4),>(bmp+ofs1+$140*04+5),>(bmp+ofs1+$140*04+6),>(bmp+ofs1+$140*04+7)
+	!byte >(bmp+ofs1+$140*05+0),>(bmp+ofs1+$140*05+1),>(bmp+ofs1+$140*05+2),>(bmp+ofs1+$140*05+3),>(bmp+ofs1+$140*05+4),>(bmp+ofs1+$140*05+5),>(bmp+ofs1+$140*05+6),>(bmp+ofs1+$140*05+7)
+	!byte >(bmp+ofs1+$140*06+0),>(bmp+ofs1+$140*06+1),>(bmp+ofs1+$140*06+2),>(bmp+ofs1+$140*06+3),>(bmp+ofs1+$140*06+4),>(bmp+ofs1+$140*06+5),>(bmp+ofs1+$140*06+6),>(bmp+ofs1+$140*06+7)
+	!byte >(bmp+ofs1+$140*07+0),>(bmp+ofs1+$140*07+1),>(bmp+ofs1+$140*07+2),>(bmp+ofs1+$140*07+3),>(bmp+ofs1+$140*07+4),>(bmp+ofs1+$140*07+5),>(bmp+ofs1+$140*07+6),>(bmp+ofs1+$140*07+7)
+	!byte >(bmp+ofs1+$140*08+0),>(bmp+ofs1+$140*08+1),>(bmp+ofs1+$140*08+2),>(bmp+ofs1+$140*08+3),>(bmp+ofs1+$140*08+4),>(bmp+ofs1+$140*08+5),>(bmp+ofs1+$140*08+6),>(bmp+ofs1+$140*08+7)
+	!byte >(bmp+ofs1+$140*09+0),>(bmp+ofs1+$140*09+1),>(bmp+ofs1+$140*09+2),>(bmp+ofs1+$140*09+3),>(bmp+ofs1+$140*09+4),>(bmp+ofs1+$140*09+5),>(bmp+ofs1+$140*09+6),>(bmp+ofs1+$140*09+7)
+	!byte >(bmp+ofs1+$140*10+0),>(bmp+ofs1+$140*10+1),>(bmp+ofs1+$140*10+2),>(bmp+ofs1+$140*10+3),>(bmp+ofs1+$140*10+4),>(bmp+ofs1+$140*10+5),>(bmp+ofs1+$140*10+6),>(bmp+ofs1+$140*10+7)
+	!byte >(bmp+ofs1+$140*11+0),>(bmp+ofs1+$140*11+1),>(bmp+ofs1+$140*11+2),>(bmp+ofs1+$140*11+3),>(bmp+ofs1+$140*11+4),>(bmp+ofs1+$140*11+5),>(bmp+ofs1+$140*11+6),>(bmp+ofs1+$140*11+7)
+	!byte >(bmp+ofs1+$140*12+0),>(bmp+ofs1+$140*12+1),>(bmp+ofs1+$140*12+2),>(bmp+ofs1+$140*12+3),>(bmp+ofs1+$140*12+4),>(bmp+ofs1+$140*12+5),>(bmp+ofs1+$140*12+6),>(bmp+ofs1+$140*12+7)
+	!byte >(bmp+ofs1+$140*13+0),>(bmp+ofs1+$140*13+1),>(bmp+ofs1+$140*13+2),>(bmp+ofs1+$140*13+3),>(bmp+ofs1+$140*13+4),>(bmp+ofs1+$140*13+5),>(bmp+ofs1+$140*13+6),>(bmp+ofs1+$140*13+7)
+	!byte >(bmp+ofs1+$140*14+0),>(bmp+ofs1+$140*14+1),>(bmp+ofs1+$140*14+2),>(bmp+ofs1+$140*14+3),>(bmp+ofs1+$140*14+4),>(bmp+ofs1+$140*14+5),>(bmp+ofs1+$140*14+6),>(bmp+ofs1+$140*14+7)
+	!byte >(bmp+ofs1+$140*15+0),>(bmp+ofs1+$140*15+1),>(bmp+ofs1+$140*15+2),>(bmp+ofs1+$140*15+3),>(bmp+ofs1+$140*15+4),>(bmp+ofs1+$140*15+5),>(bmp+ofs1+$140*15+6),>(bmp+ofs1+$140*15+7)
+	!byte >(bmp+ofs1+$140*16+0),>(bmp+ofs1+$140*16+1),>(bmp+ofs1+$140*16+2),>(bmp+ofs1+$140*16+3),>(bmp+ofs1+$140*16+4),>(bmp+ofs1+$140*16+5),>(bmp+ofs1+$140*16+6),>(bmp+ofs1+$140*16+7)
+	!byte >(bmp+ofs1+$140*17+0),>(bmp+ofs1+$140*17+1),>(bmp+ofs1+$140*17+2),>(bmp+ofs1+$140*17+3),>(bmp+ofs1+$140*17+4),>(bmp+ofs1+$140*17+5),>(bmp+ofs1+$140*17+6),>(bmp+ofs1+$140*17+7)
+	!byte >(bmp+ofs1+$140*18+0),>(bmp+ofs1+$140*18+1),>(bmp+ofs1+$140*18+2),>(bmp+ofs1+$140*18+3),>(bmp+ofs1+$140*18+4),>(bmp+ofs1+$140*18+5),>(bmp+ofs1+$140*18+6),>(bmp+ofs1+$140*18+7)
+	!byte >(bmp+ofs1+$140*19+0),>(bmp+ofs1+$140*19+1),>(bmp+ofs1+$140*19+2),>(bmp+ofs1+$140*19+3),>(bmp+ofs1+$140*19+4),>(bmp+ofs1+$140*19+5),>(bmp+ofs1+$140*19+6),>(bmp+ofs1+$140*19+7)
+
+!align 255,0
+plot_add_y_hi2
+	!byte >(bmp2+ofs1+$140*00+0),>(bmp2+ofs1+$140*00+1),>(bmp2+ofs1+$140*00+2),>(bmp2+ofs1+$140*00+3),>(bmp2+ofs1+$140*00+4),>(bmp2+ofs1+$140*00+5),>(bmp2+ofs1+$140*00+6),>(bmp2+ofs1+$140*00+7)
+	!byte >(bmp2+ofs1+$140*01+0),>(bmp2+ofs1+$140*01+1),>(bmp2+ofs1+$140*01+2),>(bmp2+ofs1+$140*01+3),>(bmp2+ofs1+$140*01+4),>(bmp2+ofs1+$140*01+5),>(bmp2+ofs1+$140*01+6),>(bmp2+ofs1+$140*01+7)
+	!byte >(bmp2+ofs1+$140*02+0),>(bmp2+ofs1+$140*02+1),>(bmp2+ofs1+$140*02+2),>(bmp2+ofs1+$140*02+3),>(bmp2+ofs1+$140*02+4),>(bmp2+ofs1+$140*02+5),>(bmp2+ofs1+$140*02+6),>(bmp2+ofs1+$140*02+7)
+	!byte >(bmp2+ofs1+$140*03+0),>(bmp2+ofs1+$140*03+1),>(bmp2+ofs1+$140*03+2),>(bmp2+ofs1+$140*03+3),>(bmp2+ofs1+$140*03+4),>(bmp2+ofs1+$140*03+5),>(bmp2+ofs1+$140*03+6),>(bmp2+ofs1+$140*03+7)
+	!byte >(bmp2+ofs1+$140*04+0),>(bmp2+ofs1+$140*04+1),>(bmp2+ofs1+$140*04+2),>(bmp2+ofs1+$140*04+3),>(bmp2+ofs1+$140*04+4),>(bmp2+ofs1+$140*04+5),>(bmp2+ofs1+$140*04+6),>(bmp2+ofs1+$140*04+7)
+	!byte >(bmp2+ofs1+$140*05+0),>(bmp2+ofs1+$140*05+1),>(bmp2+ofs1+$140*05+2),>(bmp2+ofs1+$140*05+3),>(bmp2+ofs1+$140*05+4),>(bmp2+ofs1+$140*05+5),>(bmp2+ofs1+$140*05+6),>(bmp2+ofs1+$140*05+7)
+	!byte >(bmp2+ofs1+$140*06+0),>(bmp2+ofs1+$140*06+1),>(bmp2+ofs1+$140*06+2),>(bmp2+ofs1+$140*06+3),>(bmp2+ofs1+$140*06+4),>(bmp2+ofs1+$140*06+5),>(bmp2+ofs1+$140*06+6),>(bmp2+ofs1+$140*06+7)
+	!byte >(bmp2+ofs1+$140*07+0),>(bmp2+ofs1+$140*07+1),>(bmp2+ofs1+$140*07+2),>(bmp2+ofs1+$140*07+3),>(bmp2+ofs1+$140*07+4),>(bmp2+ofs1+$140*07+5),>(bmp2+ofs1+$140*07+6),>(bmp2+ofs1+$140*07+7)
+	!byte >(bmp2+ofs1+$140*08+0),>(bmp2+ofs1+$140*08+1),>(bmp2+ofs1+$140*08+2),>(bmp2+ofs1+$140*08+3),>(bmp2+ofs1+$140*08+4),>(bmp2+ofs1+$140*08+5),>(bmp2+ofs1+$140*08+6),>(bmp2+ofs1+$140*08+7)
+	!byte >(bmp2+ofs1+$140*09+0),>(bmp2+ofs1+$140*09+1),>(bmp2+ofs1+$140*09+2),>(bmp2+ofs1+$140*09+3),>(bmp2+ofs1+$140*09+4),>(bmp2+ofs1+$140*09+5),>(bmp2+ofs1+$140*09+6),>(bmp2+ofs1+$140*09+7)
+	!byte >(bmp2+ofs1+$140*10+0),>(bmp2+ofs1+$140*10+1),>(bmp2+ofs1+$140*10+2),>(bmp2+ofs1+$140*10+3),>(bmp2+ofs1+$140*10+4),>(bmp2+ofs1+$140*10+5),>(bmp2+ofs1+$140*10+6),>(bmp2+ofs1+$140*10+7)
+	!byte >(bmp2+ofs1+$140*11+0),>(bmp2+ofs1+$140*11+1),>(bmp2+ofs1+$140*11+2),>(bmp2+ofs1+$140*11+3),>(bmp2+ofs1+$140*11+4),>(bmp2+ofs1+$140*11+5),>(bmp2+ofs1+$140*11+6),>(bmp2+ofs1+$140*11+7)
+	!byte >(bmp2+ofs1+$140*12+0),>(bmp2+ofs1+$140*12+1),>(bmp2+ofs1+$140*12+2),>(bmp2+ofs1+$140*12+3),>(bmp2+ofs1+$140*12+4),>(bmp2+ofs1+$140*12+5),>(bmp2+ofs1+$140*12+6),>(bmp2+ofs1+$140*12+7)
+	!byte >(bmp2+ofs1+$140*13+0),>(bmp2+ofs1+$140*13+1),>(bmp2+ofs1+$140*13+2),>(bmp2+ofs1+$140*13+3),>(bmp2+ofs1+$140*13+4),>(bmp2+ofs1+$140*13+5),>(bmp2+ofs1+$140*13+6),>(bmp2+ofs1+$140*13+7)
+	!byte >(bmp2+ofs1+$140*14+0),>(bmp2+ofs1+$140*14+1),>(bmp2+ofs1+$140*14+2),>(bmp2+ofs1+$140*14+3),>(bmp2+ofs1+$140*14+4),>(bmp2+ofs1+$140*14+5),>(bmp2+ofs1+$140*14+6),>(bmp2+ofs1+$140*14+7)
+	!byte >(bmp2+ofs1+$140*15+0),>(bmp2+ofs1+$140*15+1),>(bmp2+ofs1+$140*15+2),>(bmp2+ofs1+$140*15+3),>(bmp2+ofs1+$140*15+4),>(bmp2+ofs1+$140*15+5),>(bmp2+ofs1+$140*15+6),>(bmp2+ofs1+$140*15+7)
+	!byte >(bmp2+ofs1+$140*16+0),>(bmp2+ofs1+$140*16+1),>(bmp2+ofs1+$140*16+2),>(bmp2+ofs1+$140*16+3),>(bmp2+ofs1+$140*16+4),>(bmp2+ofs1+$140*16+5),>(bmp2+ofs1+$140*16+6),>(bmp2+ofs1+$140*16+7)
+	!byte >(bmp2+ofs1+$140*17+0),>(bmp2+ofs1+$140*17+1),>(bmp2+ofs1+$140*17+2),>(bmp2+ofs1+$140*17+3),>(bmp2+ofs1+$140*17+4),>(bmp2+ofs1+$140*17+5),>(bmp2+ofs1+$140*17+6),>(bmp2+ofs1+$140*17+7)
+	!byte >(bmp2+ofs1+$140*18+0),>(bmp2+ofs1+$140*18+1),>(bmp2+ofs1+$140*18+2),>(bmp2+ofs1+$140*18+3),>(bmp2+ofs1+$140*18+4),>(bmp2+ofs1+$140*18+5),>(bmp2+ofs1+$140*18+6),>(bmp2+ofs1+$140*18+7)
+	!byte >(bmp2+ofs1+$140*19+0),>(bmp2+ofs1+$140*19+1),>(bmp2+ofs1+$140*19+2),>(bmp2+ofs1+$140*19+3),>(bmp2+ofs1+$140*19+4),>(bmp2+ofs1+$140*19+5),>(bmp2+ofs1+$140*19+6),>(bmp2+ofs1+$140*19+7)
+
+!align 255,0
+plot_mask
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
+
+!align 255,0
+kreski1
+	!byte 1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0
+	!byte 1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0
+	!byte 1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0
+	!byte 1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0
+	!byte 1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0
+	!byte 1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0
+	!byte 1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0
+	!byte 1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0
+	!byte 1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0
+	!byte 1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0
+	!byte 1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0
+	!byte 1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0
+	!byte 1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0
+	!byte 1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0
+	!byte 1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0
+	!byte 1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0
+kreski1_end
+!align 255,0
+kreski2
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,1,0,0,0,1,1,1,0,0,0
+	!byte 1,1,0,0
+kreski2_end
+!align 255,0
+kreski3
+	!byte 1,0,0,1,0,0,1,0,0,1,0,0,1,0,0
+	!byte 1,0,0,1,0,0,1,0,0,1,0,0,1,0,0
+	!byte 1,0,0,1,0,0,1,0,0,1,0,0,1,0,0
+	!byte 1,0,0,1,0,0,1,0,0,1,0,0,1,0,0
+	!byte 1,0,0,1,0,0,1,0,0,1,0,0,1,0,0
+	!byte 1,0,0,1,0,0,1,0,0,1,0,0,1,0,0
+	!byte 1,0,0,1,0,0,1,0,0,1,0,0,1,0,0
+	!byte 1,0,0,1,0,0,1,0,0,1,0,0,1,0,0
+	!byte 1,0,0,1,0,0,1,0,0,1,0,0,1,0,0
+	!byte 1,0,0,1,0,0,1,0,0,1,0,0,1,0,0
+	!byte 1,0,0,1,0,0,1,0,0,1,0,0,1,0,0
+	!byte 1,0,0,1,0,0,1,0,0,1,0,0,1,0,0
+	!byte 1,0,0,1,0,0,1,0,0,1,0,0,1,0,0
+	!byte 1,0,0,1,0,0,1,0,0,1,0,0,1,0,0
+	!byte 1,0,0,1,0,0,1,0,0,1,0,0,1,0,0
+	!byte 1,0,0,1,0,0,1,0,0,1,0,0,1,0,0
+	!byte 1,0,0,1,0,0,1,0,0,1,0,0,1,0,0
+	!byte 0
+kreski3_end
+!align 255,0
+kreski4
+	!byte 1,1,0,1,1,0,1,1,0,1,1,0,1,1,0
+	!byte 1,1,0,1,1,0,1,1,0,1,1,0,1,1,0
+	!byte 1,1,0,1,1,0,1,1,0,1,1,0,1,1,0
+	!byte 1,1,0,1,1,0,1,1,0,1,1,0,1,1,0
+	!byte 1,1,0,1,1,0,1,1,0,1,1,0,1,1,0
+	!byte 1,1,0,1,1,0,1,1,0,1,1,0,1,1,0
+	!byte 1,1,0,1,1,0,1,1,0,1,1,0,1,1,0
+	!byte 1,1,0,1,1,0,1,1,0,1,1,0,1,1,0
+	!byte 1,1,0,1,1,0,1,1,0,1,1,0,1,1,0
+	!byte 1,1,0,1,1,0,1,1,0,1,1,0,1,1,0
+	!byte 1,1,0,1,1,0,1,1,0,1,1,0,1,1,0
+	!byte 1,1,0,1,1,0,1,1,0,1,1,0,1,1,0
+	!byte 1,1,0,1,1,0,1,1,0,1,1,0,1,1,0
+	!byte 1,1,0,1,1,0,1,1,0,1,1,0,1,1,0
+	!byte 1,1,0,1,1,0,1,1,0,1,1,0,1,1,0
+	!byte 1,1,0,1,1,0,1,1,0,1,1,0,1,1,0
+	!byte 1,1,0,1,1,0,1,1,0,1,1,0,1,1,0
+	!byte 0
+reski4_end
+
+spr_sin
+	!byte 0,0,0,0,0,0,1,1,2,2,3,4,4,5,6,6
+	!byte 7,8,9,9,10,11,11,12,12,13,13,14,14,14,14,14
+	!byte 14,14,14,14,14,13,13,12,12,11,11,10,9,9,8,7
+	!byte 6,6,5,4,4,3,2,2,1,1,0,0,0,0,0,0
+	!byte 0,0,0,0,0,0,1,1,2,2,3,4,4,5,6,6
+	!byte 7,8,9,9,10,11,11,12,12,13,13,14,14,14,14,14
+	!byte 14,14,14,14,14,13,13,12,12,11,11,10,9,9,8,7
+	!byte 6,6,5,4,4,3,2,2,1,1,0,0,0,0,0,0
+	!byte 0,0,0,0,0,0,1,1,2,2,3,4,4,5,6,6
+	!byte 7,8,9,9,10,11,11,12,12,13,13,14,14,14,14,14
+	!byte 14,14,14,14,14,13,13,12,12,11,11,10,9,9,8,7
+	!byte 6,6,5,4,4,3,2,2,1,1,0,0,0,0,0,0
+	!byte 0,0,0,0,0,0,1,1,2,2,3,4,4,5,6,6
+	!byte 7,8,9,9,10,11,11,12,12,13,13,14,14,14,14,14
+	!byte 14,14,14,14,14,13,13,12,12,11,11,10,9,9,8,7
+	!byte 6,6,5,4,4,3,2,2,1,1,0,0,0,0,0,0
+
+	* = bmp_unreal
+_bmp_unreal
+	!bin "data\unreal.art",$1f40,2
+
+!align 255,0
+unreal_dist_tab
+	!bin "data\dist.bin",,
+unreal_dist_tab_koniec
+
+	
+koniec_koniec

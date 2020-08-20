@@ -3,7 +3,7 @@
   "tasks": [
     {
       "type": "shell",
-      "label": "Build kickass leaf.asm",
+      "label": "Build kickass calming-stream.asm",
       "command": "java",
       "args": [
         "-jar",
@@ -15,7 +15,7 @@
         "-showmem",
         "-debugdump",
         "-vicesymbols",
-        "leaf.asm"
+        "calming-stream.asm"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
