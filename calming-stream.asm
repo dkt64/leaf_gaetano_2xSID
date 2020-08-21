@@ -71,8 +71,16 @@ start:
 	sta $01
 
 	lda #0
-	sta $d011
 	jsr $1000
+
+	Sync()
+
+	lda #$0e
+	sta $d020
+	sta $d021
+	sta $d011
+
+	jsr init_gfx
 
 	lda op1
 	eor op2
@@ -88,8 +96,17 @@ start:
 	lsr $d019
 	IrqSetup(IRQ1_LINE, irq1)
 
-	Sync()
+	ldx #100
+wa5:	Sync()
+	dex
+	bne wa5
 
+	cli
+
+	ldx #200
+wa3:	Sync()
+	dex
+	bne wa3
 	lda #$3b
 	sta $d011
 	lda #$02
@@ -98,7 +115,12 @@ start:
 	sta $d020
 	sta $d021
 	SetD018(BMP, SCREEN)
-	cli
+
+	ldx #200
+wa4:	Sync()
+	dex
+	bne wa4
+
 	jmp main
 
 //====================================================================
@@ -410,6 +432,22 @@ kkiery2:	inc klp2+1
 kkierx2:	inx
 kkierx3:	cpx #0
 	bne kkres2
+	rts
+
+//====================================================================
+// gfx
+//====================================================================
+
+init_gfx:
+
+// 	ldx #18
+// 	lda #$01
+// !:	sta SCREEN+$28*09+18,x
+// 	sta SCREEN+$28*10+18,x
+// 	sta SCREEN+$28*11+18,x
+// 	dex
+// 	bpl !-
+
 	rts
 
 //====================================================================
