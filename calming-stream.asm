@@ -38,6 +38,18 @@
 .const	lines_ptr_l	= lines_ptr
 .const	lines_ptr_h	= lines_ptr+1
 
+.const 	ptr1		= $12
+.const	ptr1l		= ptr1
+.const	ptr1h		= ptr1+1
+
+.const 	ptr2		= $14
+.const	ptr2l		= ptr2
+.const	ptr2h		= ptr2+1
+
+.const 	time		= $16
+.const	time_l		= time
+.const	time_h		= time+1
+
 //====================================================================
 // Basic i start programu
 //====================================================================
@@ -71,6 +83,8 @@ start:
 	sta $01
 
 	lda #0
+	sta time_l
+	sta time_h
 	jsr $1000
 
 	Sync()
@@ -101,12 +115,6 @@ wa5:	Sync()
 	dex
 	bne wa5
 
-	cli
-
-	ldx #200
-wa3:	Sync()
-	dex
-	bne wa3
 	lda #$3b
 	sta $d011
 	lda #$02
@@ -116,10 +124,12 @@ wa3:	Sync()
 	sta $d021
 	SetD018(BMP, SCREEN)
 
-	ldx #200
-wa4:	Sync()
-	dex
-	bne wa4
+	cli
+
+// 	ldx #200
+// wa4:	Sync()
+// 	dex
+// 	bne wa4
 
 	jmp main
 
@@ -131,6 +141,13 @@ irq1:
 	IrqEntry(IRQ_ZP)
 
 	jsr $1003
+
+	inc time_l
+	bne !+
+	inc time_h
+!:
+
+	jsr fadein
 
 	lsr $d019
 	IrqExit(IRQ_ZP)
@@ -447,15 +464,241 @@ kkierx3:	cpx #0
 
 init_gfx:
 
-// 	ldx #18
-// 	lda #$01
-// !:	sta SCREEN+$28*09+18,x
-// 	sta SCREEN+$28*10+18,x
-// 	sta SCREEN+$28*11+18,x
-// 	dex
-// 	bpl !-
+	lda #<SCREEN
+	sta ptr1l
+	lda #>SCREEN
+	sta ptr1h
+	lda #<BMP
+	sta ptr2l
+	lda #>BMP
+	sta ptr2h
+	ldx #0
+	ldy #3
+	jsr bmp_neg
+
+	ldx #18
+	lda #$ee
+!:
+	sta SCREEN+$28*09+18,x
+	sta SCREEN+$28*10+18,x
+	sta SCREEN+$28*11+18,x
+
+	sta SCREEN+$28*12+18,x
+	sta SCREEN+$28*13+18,x
+	sta SCREEN+$28*14+18,x
+
+	sta SCREEN+$28*17+18,x
+	sta SCREEN+$28*18+18,x
+	sta SCREEN+$28*19+18,x
+	sta SCREEN+$28*20+18,x
+	
+	dex
+	bpl !-
 
 	rts
+
+// ==========================================================
+//  Zmiona kolorów bitmapy i negacja
+// ==========================================================
+
+bmp_neg:
+	stx neg_st+1
+	sty neg_en+1
+	
+	lda ptr1h
+	clc
+	adc #4
+	sta fin+1
+	
+dekod:	ldy #$00
+neg_st:	ldx #0
+!:	lda (ptr1),y
+	cmp src_col,x
+	beq !+
+	inx
+neg_en:	cpx #2
+	bne !-
+	beq cont
+!:	lda dst_col,x
+	sta (ptr1),y
+	lda col_neg,x
+	bne neg
+
+cont:
+	inc ptr1l
+	bne !+
+	inc ptr1h
+!:	lda ptr2l
+	clc
+	adc #8
+	sta ptr2l
+	lda ptr2h
+	adc #0
+	sta ptr2h
+	
+	lda ptr1h
+fin:	cmp #0
+	beq !+
+	jmp dekod
+!:
+	rts
+
+neg:
+	ldy #$07
+!:	lda (ptr2),y
+	eor #$ff
+	sta (ptr2),y
+	dey
+	bpl !-
+	jmp cont
+	
+src_col:
+	.byte $1e,$6e,$0e
+dst_col:
+	.byte $e1,$e6,$e0
+col_neg:
+	.byte 1,1,1
+
+//====================================================================
+// fadein
+//====================================================================
+
+fadein:
+	lda time_l
+	cmp time_f1
+	bne !+
+	lda time_h
+	cmp time_f1+1
+	bne !+
+	lda #$20
+	sta f1
+!:
+
+	lda time_l
+	cmp time_f2
+	bne !+
+	lda time_h
+	cmp time_f2+1
+	bne !+
+	lda #$20
+	sta f2
+!:
+
+	lda time_l
+	cmp time_f3
+	bne !+
+	lda time_h
+	cmp time_f3+1
+	bne !+
+	lda #$20
+	sta f3
+!:
+
+f1:	lda fade1
+f2:	lda fade2
+f3:	lda fade3
+
+	rts
+
+//====================================================================
+
+time_f1:	.word 490
+time_f2:	.word 580
+time_f3:	.word 400
+
+//====================================================================
+// fade1
+//====================================================================
+
+fade1:
+
+	ldx f1_index
+	cpx #[f1_tab_end-f1_tab]
+	bne !+
+	rts
+!:
+	inc f1_index
+	lda f1_tab,x
+
+	ldx #18
+!:
+	sta SCREEN+$28*09+18,x
+	sta SCREEN+$28*10+18,x
+	sta SCREEN+$28*11+18,x
+	
+	dex
+	bpl !-
+
+	rts
+
+//====================================================================
+
+f1_index:	.byte 0
+f1_tab:	.byte $e3,$e3,$e3,$ed,$ed,$ed,$e1
+f1_tab_end:
+
+//====================================================================
+// fade2
+//====================================================================
+
+fade2:
+
+	ldx f2_index
+	cpx #[f2_tab_end-f2_tab]
+	bne !+
+	rts
+!:
+	inc f2_index
+	lda f2_tab,x
+
+	ldx #18
+!:
+	sta SCREEN+$28*12+18,x
+	sta SCREEN+$28*13+18,x
+	sta SCREEN+$28*14+18,x
+	
+	dex
+	bpl !-
+
+	rts
+
+//====================================================================
+
+f2_index:	.byte 0
+f2_tab:	.byte $e3,$e3,$e3,$ed,$ed,$ed,$e1,$ed,$ed,$ed,$e3,$e3,$e3,$e4,$e4,$e4,$eb,$eb,$eb,$e6
+f2_tab_end:
+
+//====================================================================
+// fade3
+//====================================================================
+
+fade3:
+
+	ldx f3_index
+	cpx #[f3_tab_end-f3_tab]
+	bne !+
+	rts
+!:
+	inc f3_index
+	lda f3_tab,x
+
+	ldx #18
+!:
+	sta SCREEN+$28*17+18,x
+	sta SCREEN+$28*18+18,x
+	sta SCREEN+$28*19+18,x
+	sta SCREEN+$28*20+18,x
+	
+	dex
+	bpl !-
+
+	rts
+
+//====================================================================
+
+f3_index:	.byte 0
+f3_tab:	.byte $e3,$e3,$e3,$ed,$ed,$ed,$e1,$ed,$ed,$ed,$e3,$e3,$e3,$e4,$e4,$e4,$eb,$eb,$eb,$e6
+f3_tab_end:
 
 //====================================================================
 // dane
