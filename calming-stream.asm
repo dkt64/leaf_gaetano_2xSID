@@ -127,14 +127,14 @@ draw_all_lines:
 // 	dex
 // 	bne !-
 
-// 	lda #<kreski1
-// 	clc
-// kr1:	adc #0
-// 	sta kkres1+1
-// 	sta kkres2+1
-// 	lda #>kreski1
-// 	sta kkres1+2
-// 	sta kkres2+2
+	lda #<kreski2
+	clc
+kr1:	adc #0
+	sta kkres1+1
+	sta kkres2+1
+	lda #>kreski2
+	sta kkres1+2
+	sta kkres2+2
 
 	ldy #0
 	lda (lines_ptr),y
@@ -164,7 +164,6 @@ move:
 	lda (lines_ptr),y
 	beq !+
 	
-	// inc kr1+1
 
 	lda lines_ptr_l
 	clc
@@ -175,8 +174,10 @@ move:
 	jmp draw_all_lines
 
 !:
+	inc kr1+1
+	inc kr1+1
 
-	jmp *
+	jmp main
 
 //====================================================================
 
@@ -274,7 +275,7 @@ klp11:	cpy #0
 kkiery1:	inc klp1+1
 	
 kkres1:	lda kreski1
-	// beq !+
+	beq !+
 	
 	lda plot_add_y_lo,y
 	sta plot_ptr_l
@@ -287,8 +288,8 @@ kbuf_pl1:	lda plot_add_y_hi,y
 	sta (plot_ptr),y
 	Sync()
 !:	
-	// inc kkres1+1
-	// inc kkres2+1
+	inc kkres1+1
+	inc kkres2+1
 	lda delta
 	sec
 	sbc dx
@@ -309,7 +310,7 @@ kpozioma:
 	sta delta
 	
 kkres2:	lda kreski1
-	// beq !+
+	beq !+
 
 klp2:	ldy #0
 	lda plot_add_y_lo,y
@@ -323,8 +324,8 @@ kbuf_pl2:	lda plot_add_y_hi,y
 	sta (plot_ptr),y
 	Sync()
 !:
-	// inc kkres1+1
-	// inc kkres2+1
+	inc kkres1+1
+	inc kkres2+1
 	lda delta
 	sec
 	sbc dy
