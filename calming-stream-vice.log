@@ -46,7 +46,6 @@ Error - CRT header invalid.
 CART: 'C:\c64\src\samar\leaf_gaetano_2xSID\calming-stream.prg' is not a valid CRT file.
 AUTOSTART: Loading PRG file `C:\c64\src\samar\leaf_gaetano_2xSID\calming-stream.prg' with direct RAM injection.
 AUTOSTART: Resetting the machine to autostart '*'
-AUTOSTART: Turning Warp mode on
 AUTOSTART: `C:\c64\src\samar\leaf_gaetano_2xSID\calming-stream.prg' recognized as program/p00 file.
 Main CPU: starting at ($FFFC).
 Main CPU: RESET.
@@ -54,9 +53,8 @@ Sound: Opened device `dx', speed 22050Hz, fragment size 2.9ms, buffer size 200ms
 reSID: MOS8580, filter on, sampling rate 22050Hz - resampling, pass to 9922Hz
 reSID: MOS8580, filter on, sampling rate 22050Hz - resampling, pass to 9922Hz
 Drive 8: RESET.
-AUTOSTART: Injecting program data at $0801 (size $1ba3)
+AUTOSTART: Injecting program data at $0801 (size $1bab)
 AUTOSTART: Ready
-AUTOSTART: Turning Warp mode off
 AUTOSTART: Starting program.
 AUTOSTART: Done.
 Writing configuration file `C:\Users\Bajtek\AppData\Roaming\vice\3.1\vice.ini'.

@@ -193,6 +193,7 @@ move:
 	// Jeżei drugie zero to koniec
 	iny
 	lda (lines_ptr),y
+	cmp #$ff
 	beq !+
 	
 	lda lines_ptr_l
@@ -215,6 +216,11 @@ wa1:	Sync()
 	inc kr1+1
 	inc kr1+1
 
+	lda lines_ptr_l
+	sta $ffe
+	lda lines_ptr_h
+	sta $fff
+
 	inc iteracje
 	lda iteracje
 	cmp #3
@@ -227,6 +233,7 @@ wa2:	Sync()
 
 	// zmiana kierunku
 
+	
 	lda #0
 	sta iteracje
 	sta kr1+1
