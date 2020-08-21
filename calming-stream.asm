@@ -120,32 +120,37 @@ main:
 	lda #>lines
 	sta lines_ptr_h
 
-
 draw_all_lines:
 
-	lda #<kreski1
-	clc
-kr1:	adc #0
-	sta kkres1+1
-	sta kkres2+1
-	lda #>kreski1
-	sta kkres1+2
-	sta kkres2+2
+// 	ldx #2
+// !:	Sync()
+// 	dex
+// 	bne !-
+
+// 	lda #<kreski1
+// 	clc
+// kr1:	adc #0
+// 	sta kkres1+1
+// 	sta kkres2+1
+// 	lda #>kreski1
+// 	sta kkres1+2
+// 	sta kkres2+2
 
 	ldy #0
 	lda (lines_ptr),y
-	beq !+
 	sta y0
 	iny
 	lda (lines_ptr),y
 	sta x0
 	iny
 	lda (lines_ptr),y
+	beq move		// Jeżeli zero to MoveTo
 	sta y1
 	iny
 	lda (lines_ptr),y
 	sta x1
 	jsr kline
+
 	lda lines_ptr_l
 	clc
 	adc #2
@@ -153,15 +158,27 @@ kr1:	adc #0
 	bcc draw_all_lines
 	inc lines_ptr_h
 	jmp draw_all_lines
+move:
+	// Jeżei drugie zero to koniec
+	iny
+	lda (lines_ptr),y
+	beq !+
+	
+	// inc kr1+1
+
+	lda lines_ptr_l
+	clc
+	adc #3
+	sta lines_ptr_l
+	bcc draw_all_lines
+	inc lines_ptr_h
+	jmp draw_all_lines
+
 !:
 
-	inc kr1+1
-
-	jmp main
+	jmp *
 
 //====================================================================
-
-line_nr:	.byte 0
 
 //====================================================================
 // Rysowanie linii kreskowanej
@@ -169,14 +186,14 @@ line_nr:	.byte 0
 
 kline:
 
-	lda x0
-	cmp x1
-	bne !+
-	lda y0
-	cmp y1
-	bne !+
-	rts
-!:
+// 	lda x0
+// 	cmp x1
+// 	bne !+
+// 	lda y0
+// 	cmp y1
+// 	bne !+
+// 	rts
+// !:
 
 	// Sprawdzamy kierunek linii - góra/dół
 	lda y0
@@ -257,18 +274,21 @@ klp11:	cpy #0
 kkiery1:	inc klp1+1
 	
 kkres1:	lda kreski1
-	beq !+
+	// beq !+
 	
 	lda plot_add_y_lo,y
 	sta plot_ptr_l
 kbuf_pl1:	lda plot_add_y_hi,y
 	sta plot_ptr_h
 	ldy plot_add_x,x
-	lda (plot_ptr),y
-	eor plot_mask,x
+	lda plot_mask,x
+	eor #$ff
+	and (plot_ptr),y
 	sta (plot_ptr),y
-!:	inc kkres1+1
-	inc kkres2+1
+	Sync()
+!:	
+	// inc kkres1+1
+	// inc kkres2+1
 	lda delta
 	sec
 	sbc dx
@@ -289,7 +309,7 @@ kpozioma:
 	sta delta
 	
 kkres2:	lda kreski1
-	beq !+
+	// beq !+
 
 klp2:	ldy #0
 	lda plot_add_y_lo,y
@@ -297,11 +317,14 @@ klp2:	ldy #0
 kbuf_pl2:	lda plot_add_y_hi,y
 	sta plot_ptr_h
 	ldy plot_add_x,x
-	lda (plot_ptr),y
-	ora plot_mask,x
+	lda plot_mask,x
+	eor #$ff
+	and (plot_ptr),y
 	sta (plot_ptr),y
-!:	inc kkres1+1
-	inc kkres2+1
+	Sync()
+!:
+	// inc kkres1+1
+	// inc kkres2+1
 	lda delta
 	sec
 	sbc dy
@@ -336,6 +359,10 @@ plot_add_x:
 	.byte 8*13,8*13,8*13,8*13,8*13,8*13,8*13,8*13
 	.byte 8*14,8*14,8*14,8*14,8*14,8*14,8*14,8*14
 	.byte 8*15,8*15,8*15,8*15,8*15,8*15,8*15,8*15
+	.byte 8*16,8*16,8*16,8*16,8*16,8*16,8*16,8*16
+	.byte 8*17,8*17,8*17,8*17,8*17,8*17,8*17,8*17
+	.byte 8*18,8*18,8*18,8*18,8*18,8*18,8*18,8*18
+	.byte 8*19,8*19,8*19,8*19,8*19,8*19,8*19,8*19
 
 .align $100
 plot_add_y_lo:
@@ -359,6 +386,11 @@ plot_add_y_lo:
 	.byte <(BMP+OFFSET+$140*17+0),<(BMP+OFFSET+$140*17+1),<(BMP+OFFSET+$140*17+2),<(BMP+OFFSET+$140*17+3),<(BMP+OFFSET+$140*17+4),<(BMP+OFFSET+$140*17+5),<(BMP+OFFSET+$140*17+6),<(BMP+OFFSET+$140*17+7)
 	.byte <(BMP+OFFSET+$140*18+0),<(BMP+OFFSET+$140*18+1),<(BMP+OFFSET+$140*18+2),<(BMP+OFFSET+$140*18+3),<(BMP+OFFSET+$140*18+4),<(BMP+OFFSET+$140*18+5),<(BMP+OFFSET+$140*18+6),<(BMP+OFFSET+$140*18+7)
 	.byte <(BMP+OFFSET+$140*19+0),<(BMP+OFFSET+$140*19+1),<(BMP+OFFSET+$140*19+2),<(BMP+OFFSET+$140*19+3),<(BMP+OFFSET+$140*19+4),<(BMP+OFFSET+$140*19+5),<(BMP+OFFSET+$140*19+6),<(BMP+OFFSET+$140*19+7)
+	.byte <(BMP+OFFSET+$140*20+0),<(BMP+OFFSET+$140*20+1),<(BMP+OFFSET+$140*20+2),<(BMP+OFFSET+$140*20+3),<(BMP+OFFSET+$140*20+4),<(BMP+OFFSET+$140*20+5),<(BMP+OFFSET+$140*20+6),<(BMP+OFFSET+$140*20+7)
+	.byte <(BMP+OFFSET+$140*21+0),<(BMP+OFFSET+$140*21+1),<(BMP+OFFSET+$140*21+2),<(BMP+OFFSET+$140*21+3),<(BMP+OFFSET+$140*21+4),<(BMP+OFFSET+$140*21+5),<(BMP+OFFSET+$140*21+6),<(BMP+OFFSET+$140*21+7)
+	.byte <(BMP+OFFSET+$140*22+0),<(BMP+OFFSET+$140*22+1),<(BMP+OFFSET+$140*22+2),<(BMP+OFFSET+$140*22+3),<(BMP+OFFSET+$140*22+4),<(BMP+OFFSET+$140*22+5),<(BMP+OFFSET+$140*22+6),<(BMP+OFFSET+$140*22+7)
+	.byte <(BMP+OFFSET+$140*23+0),<(BMP+OFFSET+$140*23+1),<(BMP+OFFSET+$140*23+2),<(BMP+OFFSET+$140*23+3),<(BMP+OFFSET+$140*23+4),<(BMP+OFFSET+$140*23+5),<(BMP+OFFSET+$140*23+6),<(BMP+OFFSET+$140*23+7)
+	.byte <(BMP+OFFSET+$140*24+0),<(BMP+OFFSET+$140*24+1),<(BMP+OFFSET+$140*24+2),<(BMP+OFFSET+$140*24+3),<(BMP+OFFSET+$140*24+4),<(BMP+OFFSET+$140*24+5),<(BMP+OFFSET+$140*24+6),<(BMP+OFFSET+$140*24+7)
 
 .align $100
 plot_add_y_hi:
@@ -382,6 +414,11 @@ plot_add_y_hi:
 	.byte >(BMP+OFFSET+$140*17+0),>(BMP+OFFSET+$140*17+1),>(BMP+OFFSET+$140*17+2),>(BMP+OFFSET+$140*17+3),>(BMP+OFFSET+$140*17+4),>(BMP+OFFSET+$140*17+5),>(BMP+OFFSET+$140*17+6),>(BMP+OFFSET+$140*17+7)
 	.byte >(BMP+OFFSET+$140*18+0),>(BMP+OFFSET+$140*18+1),>(BMP+OFFSET+$140*18+2),>(BMP+OFFSET+$140*18+3),>(BMP+OFFSET+$140*18+4),>(BMP+OFFSET+$140*18+5),>(BMP+OFFSET+$140*18+6),>(BMP+OFFSET+$140*18+7)
 	.byte >(BMP+OFFSET+$140*19+0),>(BMP+OFFSET+$140*19+1),>(BMP+OFFSET+$140*19+2),>(BMP+OFFSET+$140*19+3),>(BMP+OFFSET+$140*19+4),>(BMP+OFFSET+$140*19+5),>(BMP+OFFSET+$140*19+6),>(BMP+OFFSET+$140*19+7)
+	.byte >(BMP+OFFSET+$140*20+0),>(BMP+OFFSET+$140*20+1),>(BMP+OFFSET+$140*20+2),>(BMP+OFFSET+$140*20+3),>(BMP+OFFSET+$140*20+4),>(BMP+OFFSET+$140*20+5),>(BMP+OFFSET+$140*20+6),>(BMP+OFFSET+$140*20+7)
+	.byte >(BMP+OFFSET+$140*21+0),>(BMP+OFFSET+$140*21+1),>(BMP+OFFSET+$140*21+2),>(BMP+OFFSET+$140*21+3),>(BMP+OFFSET+$140*21+4),>(BMP+OFFSET+$140*21+5),>(BMP+OFFSET+$140*21+6),>(BMP+OFFSET+$140*21+7)
+	.byte >(BMP+OFFSET+$140*22+0),>(BMP+OFFSET+$140*22+1),>(BMP+OFFSET+$140*22+2),>(BMP+OFFSET+$140*22+3),>(BMP+OFFSET+$140*22+4),>(BMP+OFFSET+$140*22+5),>(BMP+OFFSET+$140*22+6),>(BMP+OFFSET+$140*22+7)
+	.byte >(BMP+OFFSET+$140*23+0),>(BMP+OFFSET+$140*23+1),>(BMP+OFFSET+$140*23+2),>(BMP+OFFSET+$140*23+3),>(BMP+OFFSET+$140*23+4),>(BMP+OFFSET+$140*23+5),>(BMP+OFFSET+$140*23+6),>(BMP+OFFSET+$140*23+7)
+	.byte >(BMP+OFFSET+$140*24+0),>(BMP+OFFSET+$140*24+1),>(BMP+OFFSET+$140*24+2),>(BMP+OFFSET+$140*24+3),>(BMP+OFFSET+$140*24+4),>(BMP+OFFSET+$140*24+5),>(BMP+OFFSET+$140*24+6),>(BMP+OFFSET+$140*24+7)
 
 // .align $100
 // plot_add_y_hi2:
@@ -412,22 +449,42 @@ plot_mask:
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
+
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
+
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
+
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
+
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
 	.byte $80,$40,$20,$10,$08,$04,$02,$01
+
+	.byte $80,$40,$20,$10,$08,$04,$02,$01
+	.byte $80,$40,$20,$10,$08,$04,$02,$01
+	.byte $80,$40,$20,$10,$08,$04,$02,$01
+	.byte $80,$40,$20,$10,$08,$04,$02,$01
+
+	.byte $80,$40,$20,$10,$08,$04,$02,$01
+	.byte $80,$40,$20,$10,$08,$04,$02,$01
+	.byte $80,$40,$20,$10,$08,$04,$02,$01
+	.byte $80,$40,$20,$10,$08,$04,$02,$01
+
+	.byte $80,$40,$20,$10,$08,$04,$02,$01
+	.byte $80,$40,$20,$10,$08,$04,$02,$01
+	.byte $80,$40,$20,$10,$08,$04,$02,$01
+	.byte $80,$40,$20,$10,$08,$04,$02,$01
+
 
 .align $100
 kreski1:
